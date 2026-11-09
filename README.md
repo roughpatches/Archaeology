@@ -19,15 +19,19 @@ npm run build      # production build into dist/
 
 ## Playing the gray-box dig
 
-- **1 / 2** pick the trowel or the brush. **Right-click** always brushes.
-- **Trowel:** a click removes one layer for 1 stamina. If that layer was the last one above the
-  find, it chips the find.
-- **Brush:** hold for about half a second to remove one layer for 3 stamina. Never chips.
-- **Blue boxes** are where your site map says the find is; the numbers are its guess at how many
-  layers sit above it. **Dark green soil** is a stain, often (not always) one layer above the find.
+- **1** pick, **2** trowel, **3** brush, **4** probe. **Right-click** always brushes.
+  - Pick: a layer off a 3 × 3 patch for 3 stamina. Chips anything it breaks onto.
+  - Trowel: one tile, one layer, 1 stamina. Chips a find if it breaks through onto it.
+  - Brush: hold to lift one layer, 3 stamina. Never chips.
+  - Probe: 1 stamina. Shows a tile's layers left, and `!` if something hard is below.
+- Each site holds three finds; one is a piece of the Lantern Crown, which comes in four pieces.
+- **Hold an exposed find** to lift it out (2 stamina). Orange tiles are soil still packed against
+  it; lifting before clearing them damages it.
+- **N** sleeps and starts the next day: stamina comes back, the trench stays. A find left partly
+  exposed overnight weathers.
 - **M** cycles the map grade (rough, measured, fine) on the same ground. **H** hides the map.
-- **E** ends the dig and lifts what's exposed. **Space** replays the same ground, **R** new ground.
-- **`** shows the debug overlay: true layers left, `F`for find tiles,`s` for stains.
+- **Space** replays the same ground, **R** opens a new site.
+- **`** shows the debug overlay: true layers left, the first letter of each find, `s` for stains.
 
 After playing, add an entry to [PLAYTEST_LOG.md](PLAYTEST_LOG.md).
 

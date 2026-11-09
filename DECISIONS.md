@@ -63,3 +63,39 @@ Decision: The first gray-box tests one decision: trowel (1 stamina, risks a chip
 (3 stamina, safe), with 100 stamina per dig, guided by a site map of three grades and by soil
 stains. Details in FEEL_DIG.md.
 Why: It is the cheapest version of the dig that has a real choice in it.
+
+D13 — Four dig tools
+Status: PROVISIONAL (until playtest). Extends D12.
+Decision: The pick (3 stamina) takes a layer off a 3 × 3 patch and chips anything it breaks onto.
+The probe (1 stamina) shows a tile's remaining layers and whether something hard is below,
+without digging. They join the trowel (1) and the brush (3).
+Why: Andrew asked for two more tools after the first playtest. The pick gives bulk work a tool,
+and the probe gives information a price, so each tool has its own job.
+
+D14 — Several finds per site, and pieces of large artifacts
+Status: PROVISIONAL (until playtest)
+Decision: Each site holds three separate finds: two whole ones and one piece of a large artifact
+(placeholder: the Lantern Crown, in four pieces, one per site). Pieces are assembled at camp once
+all are found.
+Why: Andrew's request after the first playtest.
+
+D15 — Lifting a find out
+Status: PROVISIONAL (until playtest)
+Decision: Exposing a find is not the end. You hold to lift it out (2 stamina), and every three
+tiles of soil still packed against it do a point of damage. Clearing round it first means a clean
+lift. The find rises out of the trench and its card appears.
+Why: Makes uncovering more involved and gives it a final moment of its own (playtest 1).
+
+D16 — Digs run over several days
+Status: PROVISIONAL (until playtest)
+Decision: The trench stays open between days; sleeping restores stamina. A find left partly
+exposed overnight weathers and loses a point of condition, so the plan is to expose only what you
+can lift that day.
+Why: Andrew wants the full process to take several days per site (playtest 1).
+
+D17 — Scouting, surveying, excavating
+Status: PROVISIONAL (until playtest)
+Decision: Fieldwork runs scouting (find a site), surveying (map what's in it), then excavating,
+over several days. The map grade stops being a choice and comes from how well the site was
+surveyed. Specced in FEEL_FIELDWORK.md; the survey is the next gray-box.
+Why: Andrew's request after playtest 1.

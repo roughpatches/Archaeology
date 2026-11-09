@@ -1,25 +1,29 @@
 # Session handoff
 
-**Phase:** 3, feel prototype (gray-box dig).
+**Phase:** 3, feel prototype. The dig passed its first playtest as a prototype; v2 is built and
+waiting for its playtest.
 
 ## Shipped last session
 
 - Repository set up: Phaser 3.90 + Vite + TypeScript, ESLint, Prettier, Vitest, CI.
-- The dig as pure rules (`src/engine/dig.ts`) with tests, including a bot showing that a better map
-  gives a better dig.
-- A gray-box Phaser scene for it (`src/scenes/DigScene.ts`) with a debug overlay.
-- Pitch, decisions D1 to D12, and the feel spec.
+- Dig v1, playtested by Andrew (PLAYTEST_LOG.md).
+- Dig v2 (D13 to D16): four tools (pick, trowel, brush, probe), three finds per site including a
+  Lantern Crown piece, holding to lift a find with damage from soil still against it, and digs
+  over several days with overnight weathering. Rules in `src/engine/dig.ts`, scene in
+  `src/scenes/DigScene.ts`.
+- FEEL_FIELDWORK.md: the proposal for scouting and surveying (D17).
 
 ## Next
 
-1. Andrew plays the gray-box and fills in PLAYTEST_LOG.md.
-2. Rework the dig from what the playtest says (back to the three feel questions first).
-3. Once the dig passes: gray-box the survey-to-map hand-off.
+1. Andrew playtests dig v2 and logs it.
+2. Gray-box the survey (FEEL_FIELDWORK.md), so the dig's map comes from surveying.
+3. Then scouting, then the three chained over several days.
 
 ## Open questions
 
-- Is a fine map too generous? (FEEL_DIG.md, question 4.)
+- The four FEEL_DIG.md playtest questions.
 
 ## Known issues
 
-- None known. The production bundle is about 1.2 MB, almost all Phaser; fine for now.
+- Finds-tray progress lasts only for the session; there is no save yet.
+- The production bundle is about 1.2 MB, almost all Phaser.

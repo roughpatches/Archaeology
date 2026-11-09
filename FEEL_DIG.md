@@ -1,58 +1,69 @@
-# Feel spec: the dig
+# Feel spec: the dig (v2)
 
-The dig is the core verb. This is the gate: nothing else gets built until it passes a playtest.
+The dig is the core verb. v1 passed its first playtest as a prototype; v2 adds what Andrew asked
+for (PLAYTEST_LOG.md): two more tools, several finds per site, pieces of large artifacts, a more
+involved uncovering, and digs that run over several days.
 
 ## Read: what the player sees
 
-- A trench of 12 × 9 tiles. Each tile has 2 to 4 layers of soil above the find level; depths vary
+- A trench of 14 × 10 tiles. Each tile has 2 to 4 layers of soil above the find level; depths vary
   gently, so neighbours hint at each other.
-- Soil colour shows **layers removed**, never layers remaining, so the ground alone doesn't give the
-  answer away.
-- The **site map** overlays blue boxes where it thinks the find is:
-  - **Fine:** the exact outline and exact depths.
-  - **Measured:** mostly right; a few tiles missed or extra; depths off by one about half the time
-    (shown as `~3`).
-  - **Rough:** a bigger blob, shifted up to two tiles, with no depths.
+- Soil colour shows **layers removed**, never layers remaining.
+- Three finds are buried apart from each other: two whole finds and one piece of a large artifact.
+- The **site map** overlays blue boxes where it thinks finds are. Fine: exact outlines and
+  depths. Measured: mostly right, depths off by one about half the time (`~3`). Rough: bigger
+  blobs, shifted, no depths.
 - A **stain** (dark green) shows on most find tiles, and a few empty ones, when one layer is left.
-- Stamina is a bar that every action spends.
+- A **probed** tile shows its layers left in white, with `!` if something hard is below.
+- An exposed find glows gold; the soil still packed against it is outlined orange, and hovering
+  it says how much damage lifting it now would do.
+- Stamina for the day, the day number, and a finds tray with the large artifact's pieces.
 
-## Decide: the real choice
+## Decide: the real choices
 
-Trowel or brush, tile by tile. The trowel is cheap (1) but chips the find if it breaks through onto
-it. The brush is safe but costs 3. Brushing everything costs more stamina than you have, so the
-player must judge, from the map and the stains, when they're one layer away. Which tiles to open
-first is the second choice: a rough map means exploring, and exploring spends stamina.
+1. **Which tool, tile by tile.** Pick (3 stamina, 9 tiles, chips) for overburden far from finds;
+   trowel (1, chips) for single tiles you know are deep; brush (3, safe) for the last layer;
+   probe (1) when you'd rather pay to know than guess.
+2. **When to lift.** Lift now and take damage from the soil still locking it in, or spend
+   stamina clearing round it first.
+3. **What to open today.** A find left partly exposed overnight weathers. So with the day's
+   stamina running low, the choice is to finish and lift one find, or stop and sleep before
+   exposing the next.
 
-What a player can do wrong: trowel through onto the find (chip), brush tiles that weren't close
-(waste), dig where nothing is (waste), or run out before the find is fully exposed.
+What a player can do wrong: pick or trowel onto a find (chip), waste stamina on empty ground,
+lift a find while it's locked in, or leave a find half-exposed overnight.
 
-## Feedback: good, mediocre and bad must look different
+## Feedback
 
-- A clean exposure pops gold with a small bounce and the word "found".
-- A chip shakes the camera, turns the tile red, and says "chip!".
-- Reaching bare floor on an empty tile turns it pale and says "nothing".
-- The result card scales in: **Pristine** (gold, slow bounce, sparkles), **Intact**, **Worn**,
-  **Fragment** (grey, quick).
+- Clean exposure: gold pop and "found"; the last tile of a find says "free! lift it".
+- Chip: camera shake, red tile, "chip!". The pick gives a light thud of its own.
+- Lifting: a hold with a gold bar, then the find rises out of its socket and leaves a dark hole,
+  and its card scales in with its name, condition and context. Pristine finds get a slow bounce
+  and sparkles.
+- Sleeping fades to black; finds that weathered overnight say so.
+- The finds tray shows the large artifact's pieces filling in, then "ready to assemble at camp".
 
-Condition: Pristine = all exposed, no chips. Intact = all exposed, chips ≤ 15% of the find. Worn =
-at least 60% exposed, chips ≤ 40%. Otherwise Fragment.
+Condition from damage against the find's size: Pristine = none; Intact = up to 15% (at least 1);
+Worn = up to half; otherwise Fragment.
 
 ## What the numbers say so far
 
-A simple bot that digs only where the map points (`tests/bot.ts`), over 500 seeds:
+A simple bot (`tests/bot.ts`) that digs only where the map points, clears round each find and
+lifts it, over 300 seeds:
 
-| Map      | Pristine | Intact | Worn | Fragment | Stamina left |
-| -------- | -------- | ------ | ---- | -------- | ------------ |
-| Rough    | 0%       | 1%     | 49%  | 50%      | 21           |
-| Measured | 3%       | 3%     | 86%  | 8%       | 38           |
-| Fine     | 100%     | 0%     | 0%   | 0%       | 40           |
+| Map      | Lifted finds | Pristine of those | Days per site |
+| -------- | ------------ | ----------------- | ------------- |
+| Fine     | 100%         | 97%               | 2.3           |
+| Measured | 39%          | 73%               | 1.8           |
+| Rough    | 7%           | 31%               | 2.1           |
 
-So the map clearly matters. A person who follows stains and explores should beat the bot on rough
-and measured maps; the playtest finds out whether that feels like skill or like guessing.
+The bot never explores beyond the map, so it leaves most finds behind on rough and measured maps;
+a person following stains and probing should do far better. That's what survey quality will buy
+once the map comes from the survey (FEEL_FIELDWORK.md).
 
 ## Questions the playtest should answer
 
-1. Did trowel-or-brush feel like a choice, or did one tool always win?
-2. Did the stains and the map feel like reading the ground, or like being told the answer?
-3. Did a Pristine find feel earned, and a Fragment feel like your own fault?
-4. Is a fine map too generous (100% Pristine for careful play)?
+1. Does each of the four tools have a job, or does one go unused?
+2. Does lifting feel like a moment, and is clearing round a find worth it or a chore?
+3. Does weathering make you plan your day, or just feel like a penalty?
+4. Is two to three days per site with a fine map the right length?
