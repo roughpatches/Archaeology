@@ -8,5 +8,7 @@ new Phaser.Game({
   height: 640,
   backgroundColor: '#1b1a17',
   pixelArt: true,
+  // Scale the fixed 960 × 640 play area to fit the window, keeping its shape.
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [DigScene],
 });
