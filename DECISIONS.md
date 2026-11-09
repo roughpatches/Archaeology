@@ -99,3 +99,15 @@ Decision: Fieldwork runs scouting (find a site), surveying (map what's in it), t
 over several days. The map grade stops being a choice and comes from how well the site was
 surveyed. Specced in FEEL_FIELDWORK.md; the survey is the next gray-box.
 Why: Andrew's request after playtest 1.
+
+D18 — Survey gray-box rules
+Status: PROVISIONAL (until playtest). Implements the survey half of D17.
+Decision: A site opens with a survey. A reading costs 4 of the day's 100 stamina and senses every
+square within 2, with noise that is smallest right under it and grows with distance. Readings on a
+square combine, so overlapping them makes the map surer. Each square's certainty sets its grade:
+rough (marked only on a strong signal, no depth), measured (depth within one) or fine (exact). A
+find's grade is the grade most of its squares reached, and sets its context in the dig. D hands
+the map to the dig, which starts the next morning. Pressing M in the dig still swaps in a fixed
+grade, for comparison.
+Why: Makes the map grade something you earn by surveying, and puts a spread-or-focus choice on
+every reading.

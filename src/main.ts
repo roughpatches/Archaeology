@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { DigScene } from './scenes/DigScene';
+import { SurveyScene } from './scenes/SurveyScene';
 
 new Phaser.Game({
   type: Phaser.AUTO,
@@ -10,5 +11,6 @@ new Phaser.Game({
   pixelArt: true,
   // Scale the fixed 960 × 640 play area to fit the window, keeping its shape.
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [DigScene],
+  // A site starts with surveying it; D hands the survey's map to the dig.
+  scene: [SurveyScene, DigScene],
 });

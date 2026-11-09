@@ -78,6 +78,8 @@ export interface Buried {
   lifted: boolean;
   /** Damage from lifting it while still locked in, and from weathering overnight. */
   extraDamage: number;
+  /** How well the map recorded it, which sets the context it is recorded in. */
+  mapped: MapGrade;
 }
 
 export interface MapHint {
@@ -85,12 +87,15 @@ export interface MapHint {
   predicted: boolean;
   /** The map's guess at the tile's depth; null when the map doesn't say. */
   depthEstimate: number | null;
+  /** The depth guess is exact rather than a rough guess. */
+  exact?: boolean;
 }
 
 export interface DigState {
   config: DigConfig;
   seed: number;
-  grade: MapGrade;
+  /** How the map was made: a fixed grade, or built up by surveying the site. */
+  grade: MapGrade | 'surveyed';
   tiles: Tile[];
   objects: Buried[];
   hints: MapHint[];
@@ -241,7 +246,7 @@ function makeHints(rng: Rng, c: DigConfig, grade: MapGrade, s: DigState): MapHin
     if (marked && grade === 'measured') {
       depthEstimate = Math.max(1, t.startDepth + pick(rng, [-1, 0, 0, 1]));
     }
-    return { predicted: marked, depthEstimate };
+    return { predicted: marked, depthEstimate, exact: marked && grade === 'fine' };
   });
 }
 
@@ -290,6 +295,7 @@ export function createDig(seed: number, grade: MapGrade, options: CreateOptions 
       tiles: t,
       lifted: false,
       extraDamage: 0,
+      mapped: grade,
     })),
     hints: [],
     day: 1,
@@ -299,6 +305,16 @@ export function createDig(seed: number, grade: MapGrade, options: CreateOptions 
   // Hints use their own stream so changing the map grade never changes the ground itself.
   s.hints = makeHints(mulberry32(seed ^ 0x9e3779b9), c, grade, s);
   return s;
+}
+
+/**
+ * Swaps in a map made by surveying the site (see survey.ts): its marks and depth guesses, and how
+ * well it recorded each find.
+ */
+export function applyMap(s: DigState, hints: MapHint[], mapped: MapGrade[]): void {
+  s.grade = 'surveyed';
+  s.hints = hints;
+  s.objects.forEach((b, o) => (b.mapped = mapped[o]));
 }
 
 // ---- reading the state ---------------------------------------------------------------------
@@ -375,7 +391,7 @@ export function findResult(s: DigState, o: number): FindResult {
     total: b.tiles.length,
     damage,
     condition: gradeCondition(b.tiles.length, damage),
-    context: CONTEXT[s.grade],
+    context: CONTEXT[b.mapped],
   };
 }
 

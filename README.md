@@ -4,7 +4,7 @@ A top-down, fully active fantasy archaeology game for the desktop browser. You d
 lost civilizations and extinct creatures, and piece together how each one rose and fell.
 
 The design sketch lives in a Claude Doc; [PITCH.md](PITCH.md) and [DECISIONS.md](DECISIONS.md) hold
-what's agreed. The game is in the **feel-prototype** phase: only the dig exists, as a gray-box.
+what's agreed. The game is in the **feel-prototype** phase: the survey and the dig exist, as gray-boxes.
 
 ## Running
 
@@ -17,7 +17,19 @@ npm run check      # TypeScript
 npm run build      # production build into dist/
 ```
 
-## Playing the gray-box dig
+## Playing the gray-box
+
+A site starts with a survey, then the dig.
+
+**Survey**
+
+- **Click** a square to take a reading (4 stamina). It senses everything within 2 squares, most
+  surely right under it. Warm squares: something is there; cool: probably nothing; faint: unsure.
+- The **blue boxes** are the map you'll dig with. Overlapping readings make it surer: rough
+  squares get no depths, measured ones a guess within one layer, fine ones the exact depth.
+- **N** sleeps, **D** starts digging the next morning, **R** surveys a new site.
+
+**Dig**
 
 - **1** pick, **2** trowel, **3** brush, **4** probe. **Right-click** always brushes.
   - Pick: a layer off a 3 × 3 patch for 3 stamina. Chips anything it breaks onto.
@@ -26,13 +38,13 @@ npm run build      # production build into dist/
   - Probe: 1 stamina. Shows a tile's layers left, and `!` if something hard is below.
 - Each site holds three finds; one is a piece of the Lantern Crown, which comes in four pieces.
 - **Hold an exposed find** to lift it out (2 stamina). Orange tiles are soil still packed against
-  it; lifting before clearing them damages it.
-- **N** sleeps and starts the next day: stamina comes back, the trench stays. A find left partly
-  exposed overnight weathers.
-- **M** cycles the map grade (rough, measured, fine) on the same ground. **H** hides the map.
-- **Space** replays the same ground, **R** opens a new site.
-- **`** shows the debug overlay: true layers left, the first letter of each find, `s` for stains.
+  it; lifting before clearing them damages it. Its context comes from how well it was surveyed.
+- **N** sleeps: stamina comes back, the trench stays. A find left partly exposed overnight
+  weathers.
+- **M** swaps the survey's map for a fixed grade (rough, measured, fine), for comparison. **H**
+  hides the map. **Space** replays the same ground, **R** surveys a new site.
 
+**`** shows the debug overlay in either scene. Add `?seed=42` to the address to replay a site.
 After playing, add an entry to [PLAYTEST_LOG.md](PLAYTEST_LOG.md).
 
 ## Layout

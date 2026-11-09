@@ -2,6 +2,7 @@
 // All rules live in src/engine/dig.ts; this scene only draws them and turns input into actions.
 import Phaser from 'phaser';
 import {
+  applyMap,
   area,
   canLift,
   canUse,
@@ -21,6 +22,7 @@ import {
   type DigState,
   type FindResult,
   type MapGrade,
+  type MapHint,
   type TileEvent,
   type Tool,
 } from '../engine/dig';
@@ -70,6 +72,16 @@ interface TileView {
 
 type Hold = { kind: 'brush' | 'lift'; i: number; start: number };
 
+/** What the survey hands over: the site, its map, and the day the survey ended. */
+export interface DigHandoff {
+  site: DigState;
+  day: number;
+}
+
+/** The finds tray and the Crown pieces, kept in the game registry so they outlast each site. */
+export const TRAY_KEY = 'tray';
+export const CROWN_KEY = 'crownPieces';
+
 export class DigScene extends Phaser.Scene {
   private state!: DigState;
   private seed = 1;
@@ -77,9 +89,8 @@ export class DigScene extends Phaser.Scene {
   private tool: Tool = 'trowel';
   private showMap = true;
   private showDebug = false;
-  /** Finds lifted this session, newest first, and the Crown pieces found so far. */
-  private tray: FindResult[] = [];
-  private crownPieces = new Set<number>();
+  /** The survey's map for this site, kept so Space can replay the same ground with it. */
+  private surveyed: { hints: MapHint[]; mapped: MapGrade[]; day: number } | null = null;
 
   private views: TileView[] = [];
   private overlay!: Phaser.GameObjects.Graphics;
@@ -98,16 +109,48 @@ export class DigScene extends Phaser.Scene {
     super('dig');
   }
 
-  create(): void {
-    const fromUrl = Number(new URLSearchParams(window.location.search).get('seed'));
-    this.seed = Number.isFinite(fromUrl) && fromUrl > 0 ? fromUrl : Date.now() % 100000;
+  private get tray(): FindResult[] {
+    if (!this.registry.has(TRAY_KEY)) this.registry.set(TRAY_KEY, []);
+    return this.registry.get(TRAY_KEY);
+  }
+
+  private get crownPieces(): Set<number> {
+    if (!this.registry.has(CROWN_KEY)) this.registry.set(CROWN_KEY, new Set<number>());
+    return this.registry.get(CROWN_KEY);
+  }
+
+  create(data: Partial<DigHandoff> = {}): void {
+    this.views = [];
+    this.hovered = -1;
+    this.hold = null;
+    this.card = undefined;
     this.input.mouse?.disableContextMenu();
 
     this.header = this.add.text(GRID_X, 22, '', { fontSize: '18px', color: INK });
     this.buildGrid();
     this.buildPanel();
     this.bindKeys();
-    this.newSite(this.seed, true);
+
+    if (data.site) {
+      // Digging starts the morning after the survey, on the surveyed map.
+      const site = data.site;
+      this.surveyed = {
+        hints: site.hints,
+        mapped: site.objects.map((b) => b.mapped),
+        day: (data.day ?? 1) + 1,
+      };
+      this.seed = site.seed;
+      site.day = this.surveyed.day;
+      site.stamina = site.config.stamina;
+      this.state = site;
+      this.render();
+    } else {
+      // Straight into a dig with a fixed map grade, for comparing grades.
+      this.surveyed = null;
+      const fromUrl = Number(new URLSearchParams(window.location.search).get('seed'));
+      this.seed = Number.isFinite(fromUrl) && fromUrl > 0 ? fromUrl : Date.now() % 100000;
+      this.newSite(this.seed, true);
+    }
   }
 
   update(time: number): void {
@@ -186,6 +229,7 @@ export class DigScene extends Phaser.Scene {
     TOOLS.forEach((tool, k) => kb.on(`keydown-${keys[k]}`, () => this.setTool(tool)));
     kb.on('keydown-M', () => {
       this.grade = MAP_GRADES[(MAP_GRADES.indexOf(this.grade) + 1) % MAP_GRADES.length];
+      this.surveyed = null;
       this.newSite(this.seed, false);
     });
     kb.on('keydown-H', () => {
@@ -198,7 +242,10 @@ export class DigScene extends Phaser.Scene {
     });
     kb.on('keydown-N', () => this.sleep());
     kb.on('keydown-SPACE', () => (this.card ? this.closeCard() : this.newSite(this.seed, false)));
-    kb.on('keydown-R', () => this.newSite(Math.floor(Math.random() * 100000) + 1, true));
+    // A new site starts with surveying it.
+    kb.on('keydown-R', () => {
+      if (!this.card) this.scene.start('survey', { seed: Math.floor(Math.random() * 99999) + 1 });
+    });
   }
 
   // ---- play --------------------------------------------------------------------------------
@@ -212,6 +259,10 @@ export class DigScene extends Phaser.Scene {
     const piece = fresh || keep === undefined ? missing[seed % missing.length] : keep;
     this.seed = seed;
     this.state = createDig(seed, this.grade, { piece });
+    if (this.surveyed) {
+      applyMap(this.state, this.surveyed.hints, this.surveyed.mapped);
+      this.state.day = this.surveyed.day;
+    }
     this.stopHold();
     this.closeCard();
     this.render();
@@ -355,7 +406,7 @@ export class DigScene extends Phaser.Scene {
 
       const h = s.hints[i];
       const est = this.showMap && h.predicted && h.depthEstimate !== null && t.depth > 0;
-      v.estimate.setText(est ? `${s.grade === 'measured' ? '~' : ''}${h.depthEstimate}` : '');
+      v.estimate.setText(est ? `${h.exact ? '' : '~'}${h.depthEstimate}` : '');
       v.probe.setText(t.probed && t.depth > 0 ? `${t.depth}${b ? '!' : ''}` : '');
       v.debug.setText(
         this.showDebug ? `${t.depth}${b ? ` ${b.kind.name[0]}` : ''}${t.stain ? ' s' : ''}` : '',
