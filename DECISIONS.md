@@ -198,3 +198,24 @@ can't see into a chamber before you drop in; each tunnel mouth shows a hint of w
 reading makes the hints from where you stand true. The rope up is at each floor's landing,
 before the first fork, and at the far end of the last floor. Springs give back 15 stamina.
 Why: The player should choose how to go on with limited, unreliable knowledge, and live with it.
+
+D32 — The tomb shifts around the player
+Status: PROVISIONAL (until playtest). Andrew asked for it (2026-11-12).
+Decision: Expeditions change as you move through them. Rockfalls drop rubble near you (a warning
+of trickling dust first; 8 stamina if it lands on you; walk into rubble to clear a tile for 3).
+Tunnels ahead can cave in after a groan, but never the last open way on. Some chambers have a
+shallow stream that moves a column every 6 ticks; wading costs 1 stamina a tile, and creatures
+won't cross water. Chance of a rumble each quiet tick: 4% + 1% per floor.
+Why: The place should feel alive and unstable, and keep forcing new choices.
+
+D33 — The first expedition is an ancient jungle tomb
+Status: DECIDED by Andrew (2026-11-12).
+Decision: The intro expedition is an ancient jungle tomb. The gray-box uses a mossy stone palette,
+tomb chamber names, and tomb finds; names stay placeholders (D10).
+
+D34 — Close camera, lamp-only light
+Status: PROVISIONAL (until playtest). Andrew asked for it (2026-11-12).
+Decision: The camera is zoomed in so a chamber (13 × 9 tiles) is bigger than the screen. Only what
+your lamp reaches (5 steps over open ground, and the walls around it) is shown; nothing stays lit
+behind you, and you can't see into a chamber before you drop in.
+Why: Rooms should feel big, and you shouldn't see where you came from or where you're going.

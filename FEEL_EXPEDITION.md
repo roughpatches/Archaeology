@@ -1,4 +1,4 @@
-# Feel spec: the expedition (gray-box v1)
+# Feel spec: the expedition (gray-box v2, jungle tomb)
 
 The expedition is the core verb (D23). This gray-box tests one question: **is pushing deeper
 tense, and is finding things along the way satisfying?** Coloured squares only. Every number
@@ -8,13 +8,14 @@ below is a starting value for tuning.
 
 - Press **X** at the camp placeholder. An expedition starts on floor 1 with the day's stamina
   (100 on a fresh day).
+- The first expedition is an **ancient jungle tomb** (D33).
 - Each floor is generated from a seed as **branching tunnels** (D31): it runs left to right
   through 5 layers of chambers. You land in the first chamber, where the **rope** (green) is.
   Tunnels fork forward from each chamber to one or more chambers in the next layer. Every chamber
   in the last layer has the **way down** (purple); on floor 5 it has a rope out instead. 5 floors.
 - **Every tunnel ends in a drop** (pale tile with a ">"). You can stand on the lip and turn back,
   but once you step off there is no climbing back up. Taking a fork is a commitment.
-- Each chamber holds one thing: a dig site, two crystals, a creature (two from floor 4; none on
+- Chambers are 13 × 9 tiles, bigger than the screen (D34). Each chamber holds one thing: a dig site, two crystals, a creature (two from floor 4; none on
   floor 1), a spring (+15 stamina, once), or nothing.
 - **No clock (D26). Turn-based (D29):** every step and every action is one tick, and creatures
   move on ticks. Standing still to dig lets them come to you.
@@ -29,6 +30,9 @@ below is a starting value for tuning.
 | Dig: pick / trowel / brush / probe | 3 / 1 / 2 / 1 |
 | Lift a find (L)                | 2       |
 | Bitten by a creature           | 10      |
+| Wade a stream tile             | 1       |
+| Clear a rubble tile (walk into it) | 3   |
+| Hit by a rockfall              | 8       |
 
 - **Climb out** (E on the rope at a floor's landing, or at the far end of floor 5) to end the run
   with the whole bag. So the push-or-return choice comes at each landing, before the first fork.
@@ -37,8 +41,9 @@ below is a starting value for tuning.
 
 ## Read: what the player sees
 
-- Fog of war: tiles within 4 steps are lit; tiles seen before stay dim. You **can't see into a
-  chamber until you drop into it**; then all of it shows.
+- **Lamp light only (D34):** you see 5 steps over open ground and the walls around it, fading
+  at the edge. Nothing stays lit behind you, so you can't see where you came from or where
+  you're going. You can't see into a chamber until you drop into it.
 - **Tunnel hints:** each tunnel mouth is labelled with what seems to be beyond it ("old
   stonework?", "a glint?", "scratching?", "trickling water?", "still air?"). A hint is right
   65% of the time. A survey reading makes the hints of the tunnels leading on from where you
@@ -55,6 +60,18 @@ below is a starting value for tuning.
   left, with `!` over the find. Once the find is free, soil still packed against it is outlined
   orange, and the status line shows the damage a lift would do now.
 
+## The shifting tomb (D32)
+
+- **Rockfalls:** "Dust trickles from the ceiling" and a cross of tiles near you shows falling
+  dust. Two ticks later they turn to rubble. Standing under it costs 8 stamina. Walk into rubble
+  to clear a tile (3 stamina).
+- **Collapses:** "A deep groan from one of the tunnels ahead" and three ticks later the first
+  tiles of one way on fill with rubble and its hint reads "caved in". It never takes your last
+  way on, and you can dig it out (3 a tile) if you want that way badly enough.
+- **Streams:** some chambers have a stream running top to bottom. It moves one column every 6
+  ticks. Wading costs 1 stamina a tile, and creatures won't cross it, so it can be a refuge.
+- A rumble may start on any tick with nothing already rumbling: 4% plus 1% per floor.
+
 ## Decide: the real choices
 
 1. **Which way on.** At each fork, pick a tunnel from its hint, knowing hints are wrong a third
@@ -70,7 +87,9 @@ below is a starting value for tuning.
    the brush is safe but costs more. Clearing round the find before lifting costs stamina but
    saves damage. Every action is a tick, so a creature nearby makes slow work risky.
 5. **Flare now or save it.** Two per run.
-6. **What fills the bag.** Eight slots: crystals for camp, or room for one more find.
+6. **Stay or move.** Dust overhead, a groan ahead: step clear, push through before a tunnel
+   caves in, or wade a stream to put water between you and a creature.
+7. **What fills the bag.** Eight slots: crystals for camp, or room for one more find.
 
 What a player can do wrong: chip a find, lift it while locked in, waste stamina digging empty
 ground, get bitten while digging, trust a wrong hint into a creature's chamber, go one floor too deep and collapse.
@@ -93,12 +112,17 @@ ticks.
 
 ## Questions the playtest should answer
 
-1. Forks (D31): did choosing a tunnel feel like a real choice? Did you trust the hints, survey
+1. Shifting tomb (D32): did rockfalls, collapses and streams make the tomb feel alive, or just
+   cost stamina? Were the warnings enough time to react?
+2. Camera and light (D34): do chambers feel big? Is not seeing behind you tense, or
+   disorienting in a bad way?
+
+3. Forks (D31): did choosing a tunnel feel like a real choice? Did you trust the hints, survey
    to check them, or walk to the lip first? Did the one-way drops feel tense or unfair?
-2. Did you feel the pull between going deeper and climbing out? On which floor did you turn back,
+4. Did you feel the pull between going deeper and climbing out? On which floor did you turn back,
    and why?
-3. Did surveying feel worth 4 stamina, or did you skip it?
-4. Do the dig spots feel like a satisfying moment inside the run, or an interruption?
-5. Did creatures add tension, or just annoyance? Did flares feel useful?
-6. Turn-based (D29): did it feel right, or should the expedition move in real time like the
+5. Did surveying feel worth 4 stamina, or did you skip it?
+6. Do the dig spots feel like a satisfying moment inside the run, or an interruption?
+7. Did creatures add tension, or just annoyance? Did flares feel useful?
+8. Turn-based (D29): did it feel right, or should the expedition move in real time like the
    overworld will?

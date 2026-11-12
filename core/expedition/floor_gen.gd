@@ -9,31 +9,45 @@ extends RefCounted
 ## way down. Each chamber holds one kind of thing (KINDS), and each tunnel mouth shows a hint
 ## of what is beyond it that is right HINT_ACCURACY of the time.
 
-enum Tile { WALL, FLOOR, PILLAR, LEDGE }
+enum Tile { WALL, FLOOR, PILLAR, LEDGE, RUBBLE, WATER }
 
 const SeededRng := preload("res://core/seeded_rng.gd")
 
 const LAYERS := 5
 const SLOTS := 3
-const CHAMBER := Vector2i(7, 5)
+const CHAMBER := Vector2i(13, 9)
 ## Distance from one layer's chambers to the next, and from one slot's to the next.
-const LAYER_STEP := 14
-const SLOT_STEP := 9
+const LAYER_STEP := 21
+const SLOT_STEP := 13
 const SIZE := Vector2i(
 	1 + (LAYERS - 1) * LAYER_STEP + CHAMBER.x + 1, 1 + (SLOTS - 1) * SLOT_STEP + CHAMBER.y + 1
 )
 ## Column (relative to the chamber's left edge) where a tunnel to another row turns.
-const TURN_X := CHAMBER.x + 3
+const TURN_X := CHAMBER.x + 4
 
 const KINDS: Array[String] = ["dig", "crystal", "creature", "spring", "empty"]
+## The first expedition is an ancient jungle tomb (D33). Hints and names are placeholders (D10).
 const HINTS := {
-	"dig": "old stonework",
+	"dig": "carved stonework",
 	"crystal": "a glint",
 	"creature": "scratching",
 	"spring": "trickling water",
 	"empty": "still air",
 }
 const HINT_ACCURACY := 0.65
+const CHAMBER_NAMES: Array[String] = [
+	"an antechamber",
+	"a root-choked hall",
+	"a burial gallery",
+	"a fallen shrine",
+	"a painted crypt",
+	"a vine-hung vault",
+]
+## Chance a chamber (not the landing) has a stream running through it, top to bottom.
+const STREAM_CHANCE := 0.4
+## Columns (from the chamber's left edge) a stream may run down.
+const STREAM_MIN_X := 2
+const STREAM_MAX_X := CHAMBER.x - 3
 ## Chance of each extra forward tunnel beyond the ones every chamber needs.
 const EXTRA_TUNNEL_CHANCE := 0.6
 
@@ -44,7 +58,8 @@ const LAST_SLOTS := [[1], [0, 2], [0, 1, 2]]
 
 ## Returns {
 ##   size: Vector2i, tiles: PackedByteArray (Tile values, row-major),
-##   chambers: Array of {layer, slot, rect: Rect2i, centre: Vector2i, kind: String},
+##   chambers: Array of {layer, slot, rect: Rect2i, centre: Vector2i, kind: String,
+##     name: String, stream_x: int (tile column of its stream, or -1)},
 ##   tunnels: Array of {from, to (chamber indices), path: Array[Vector2i] (mouth first, ledge
 ##     last), mouth: Vector2i, ledge: Vector2i, hint: String (a KINDS value)},
 ##   entry: Vector2i (the landing, chamber 0's centre), exits: Array[Vector2i] (way down),
@@ -108,10 +123,15 @@ static func tile_at(floor_data: Dictionary, p: Vector2i) -> int:
 	return tiles[_index(p)]
 
 
-## Ground you can stand on (floor or the lip of a drop).
+## Ground you can stand on (floor, shallow water, or the lip of a drop).
 static func walkable(floor_data: Dictionary, p: Vector2i) -> bool:
 	var t := tile_at(floor_data, p)
-	return t == Tile.FLOOR or t == Tile.LEDGE
+	return t == Tile.FLOOR or t == Tile.LEDGE or t == Tile.WATER
+
+
+## Tiles light passes over: anything you could walk on.
+static func open(t: int) -> bool:
+	return t == Tile.FLOOR or t == Tile.LEDGE or t == Tile.WATER
 
 
 ## Whether the player may step from `from` in direction `dir`. Drops only go forward: you can
@@ -191,8 +211,9 @@ static func _origin(layer: int, slot: int) -> Vector2i:
 	return Vector2i(1 + layer * LAYER_STEP, 1 + slot * SLOT_STEP)
 
 
-## Carves a chamber: open floor with a few pillars on its inner rows. Rows 0, 2 and 4 stay
-## open from side to side, because tunnels leave and arrive on them.
+## Carves a chamber: open floor with a few pillars on rows 2 and 6. Rows 0, 4 and 8 stay
+## open from side to side, because tunnels leave and arrive on them. Some chambers have a
+## stream running down one column; it is shallow, so the player can wade it, but creatures won't.
 static func _make_chamber(
 	tiles: PackedByteArray, rng: SeededRng, layer: int, slot: int, depth: int
 ) -> Dictionary:
@@ -200,10 +221,18 @@ static func _make_chamber(
 	for y in CHAMBER.y:
 		for x in CHAMBER.x:
 			tiles[_index(origin + Vector2i(x, y))] = Tile.FLOOR
-	for p: Vector2i in [Vector2i(2, 1), Vector2i(4, 1), Vector2i(2, 3), Vector2i(4, 3)]:
-		if rng.chance(0.25):
-			tiles[_index(origin + p)] = Tile.PILLAR
+	for y: int in [2, 6]:
+		for x: int in [3, 6, 9]:
+			if rng.chance(0.3):
+				tiles[_index(origin + Vector2i(x, y))] = Tile.PILLAR
+	var stream_x := -1
+	if layer > 0 and rng.chance(STREAM_CHANCE):
+		stream_x = origin.x + rng.range_int(STREAM_MIN_X, STREAM_MAX_X)
+		for y in CHAMBER.y:
+			tiles[_index(Vector2i(stream_x, origin.y + y))] = Tile.WATER
 	return {
+		"name": CHAMBER_NAMES[rng.range_int(0, CHAMBER_NAMES.size() - 1)],
+		"stream_x": stream_x,
 		"layer": layer,
 		"slot": slot,
 		"rect": Rect2i(origin, CHAMBER),

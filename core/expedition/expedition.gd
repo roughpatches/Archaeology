@@ -2,7 +2,8 @@ extends RefCounted
 ## One expedition run: floors, stamina, the bag, dig spots and creatures. Pure rules.
 ##
 ## Turn-based (D29): every step or action is one tick, and creatures move on ticks. There is
-## no clock (D26); stamina is the limit. See FEEL_EXPEDITION.md for the intent and numbers.
+## no clock (D26); stamina is the limit. The tomb shifts as you go (D32): rockfalls, tunnel
+## collapses and streams that move. See FEEL_EXPEDITION.md for the intent and numbers.
 
 const FloorGen := preload("res://core/expedition/floor_gen.gd")
 const DigSpot := preload("res://core/expedition/dig_spot.gd")
@@ -10,7 +11,7 @@ const SeededRng := preload("res://core/seeded_rng.gd")
 
 const FLOORS := 5
 const BAG_SLOTS := 8
-const SIGHT := 4
+const SIGHT := 5
 const SURVEY_COST := 4
 const SURVEY_RADIUS := 5
 const DESCEND_COST := 3
@@ -25,12 +26,29 @@ const STUN_TICKS := 3
 const SIGN_CHANCE := 0.6
 const SPRING_GAIN := 15
 const MAX_STAMINA := 100
+## Wading a stream tile.
+const WADE_COST := 1
+## Walking into rubble clears one tile of it.
+const CLEAR_COST := 3
+
+## The shifting tomb (D32). Each tick with nothing already rumbling, one may start: chance
+## QUAKE_CHANCE + QUAKE_PER_FLOOR * floor. It is announced, then lands WARN_TICKS ticks later.
+const QUAKE_CHANCE := 0.04
+const QUAKE_PER_FLOOR := 0.01
+const WARN_TICKS := 2
+## Stamina lost if a rockfall lands on you.
+const ROCK_HIT := 8
+## Tiles of a tunnel, from its mouth, that a collapse fills with rubble.
+const COLLAPSE_LENGTH := 3
+## Ticks between each step a stream takes sideways.
+const STREAM_SHIFT := 6
 
 ## Placeholder finds by rarity. Names are placeholders (D10).
+## The first expedition is a jungle tomb (D33).
 const FINDS := {
-	"common": ["Potsherd", "Bone needle", "Tide bead"],
-	"uncommon": ["Carved idol", "Bronze lamp"],
-	"rare": ["Star-chart fragment", "Sunken crown piece"],
+	"common": ["Jade bead", "Clay effigy", "Bone flute"],
+	"uncommon": ["Obsidian blade", "Serpent idol"],
+	"rare": ["Gold-leaf mask piece", "Star-carved lintel stone"],
 }
 const RARITIES: Array[String] = ["common", "uncommon", "rare"]
 
@@ -49,6 +67,8 @@ var floor_data: Dictionary
 var player: Vector2i
 ## Tiles the player has seen on this floor (Vector2i -> true).
 var seen := {}
+## Tiles lit right now (Vector2i -> true). Only these are shown: the tomb is dark behind you.
+var lit := {}
 ## Dig spots: {pos, has_sign, noticed, dig (DigSpot)}.
 var spots: Array[Dictionary] = []
 ## Material nodes (Vector2i). Bump one to mine it.
@@ -59,8 +79,18 @@ var creatures: Array[Dictionary] = []
 var springs: Array[Vector2i] = []
 ## Tunnels whose hint a survey has checked (tunnel index -> true). Checked hints are always right.
 var confirmed := {}
+## Tunnels a collapse has filled (tunnel index -> true).
+var collapsed := {}
+## Something about to come down: {kind: "rockfall" or "collapse", tiles: Array[Vector2i],
+## tunnel: int (collapse only), ticks: int left}. Empty when all is quiet.
+var rumble: Dictionary = {}
+## Streams: {chamber, x, dir}. Each moves a column every STREAM_SHIFT ticks.
+var streams: Array[Dictionary] = []
+## Whether the tomb starts rumbles by itself. Tests turn it off to stage one with start_rumble.
+var quakes := true
 
 var _rng: SeededRng
+var _quake_rng: SeededRng
 
 
 func _init(p_seed: int = 0, p_stamina: int = 100) -> void:
@@ -73,6 +103,10 @@ func enter_floor(d: int) -> void:
 	depth = d
 	floor_data = FloorGen.generate(SeededRng.derive(seed_value, ["floor", d]), d)
 	_rng = SeededRng.new(SeededRng.derive(seed_value, ["contents", d]))
+	_quake_rng = SeededRng.new(SeededRng.derive(seed_value, ["quakes", d]))
+	collapsed = {}
+	rumble = {}
+	streams = []
 	player = floor_data["entry"]
 	seen = {}
 	spots = []
@@ -104,8 +138,10 @@ func enter_floor(d: int) -> void:
 					creatures.append({"pos": places[k], "flee": 0, "stun": 0})
 			"spring":
 				springs.append(places[0])
+		if chamber["stream_x"] >= 0:
+			streams.append({"chamber": i, "x": chamber["stream_x"], "dir": _rng.pick([-1, 1])})
 	_reveal()
-	_say("Floor %d. Tunnels branch ahead; every drop is one way." % d)
+	_say("Floor %d of the tomb. Tunnels branch ahead; every drop is one way." % d)
 
 
 # ---- reading the state ------------------------------------------------------------------
@@ -118,7 +154,7 @@ func spot_at(p: Vector2i) -> int:
 	return -1
 
 
-func creature_at(p: Vector2i) -> int:
+func _creature_at(p: Vector2i) -> int:
 	for i in creatures.size():
 		if creatures[i]["pos"] == p:
 			return i
@@ -141,7 +177,7 @@ func on_exit() -> bool:
 	return (floor_data["exits"] as Array).has(player)
 
 
-func on_entry() -> bool:
+func _on_entry() -> bool:
 	return player == floor_data["entry"]
 
 
@@ -171,7 +207,10 @@ func tunnel_hints() -> Array[Dictionary]:
 		var t: Dictionary = tunnels[i]
 		var checked := confirmed.has(i)
 		var kind: String = floor_data["chambers"][t["to"]]["kind"] if checked else t["hint"]
-		out.append({"pos": t["mouth"], "text": FloorGen.HINTS[kind], "checked": checked})
+		var text: String = FloorGen.HINTS[kind]
+		if collapsed.has(i):
+			text = "caved in"
+		out.append({"pos": t["mouth"], "text": text, "checked": checked or collapsed.has(i)})
 	return out
 
 
@@ -186,12 +225,15 @@ func move(dir: Vector2i) -> bool:
 	var node := nodes.find(target)
 	if node >= 0:
 		return _mine(node)
-	if not FloorGen.can_step(floor_data, player, dir) or creature_at(target) >= 0:
+	if FloorGen.tile_at(floor_data, target) == FloorGen.Tile.RUBBLE:
+		return _clear(target)
+	if not FloorGen.can_step(floor_data, player, dir) or _creature_at(target) >= 0:
 		return false
 	var dropping := on_ledge() and dir == Vector2i.RIGHT
 	player = target
 	if dropping:
-		_say("You slide down the drop. No way back up.")
+		var room: String = floor_data["chambers"][current_chamber()]["name"]
+		_say("You slide down into %s. No way back up." % room)
 	elif on_ledge():
 		_say("A drop. Step forward and there's no climbing back.")
 	var spring := springs.find(player)
@@ -201,6 +243,8 @@ func move(dir: Vector2i) -> bool:
 		stamina += gain
 		_say("Cold spring water. +%d stamina." % gain)
 	_reveal()
+	if FloorGen.tile_at(floor_data, player) == FloorGen.Tile.WATER:
+		_spend(WADE_COST)
 	_tick()
 	return true
 
@@ -248,7 +292,7 @@ func use_flare() -> bool:
 
 
 func can_climb_out() -> bool:
-	return on_entry() or (on_exit() and depth >= FLOORS)
+	return _on_entry() or (on_exit() and depth >= FLOORS)
 
 
 ## Takes the way down, if standing on it. The last floor has no way down.
@@ -321,6 +365,24 @@ func _mine(node: int) -> bool:
 	return true
 
 
+func _clear(p: Vector2i) -> bool:
+	if stamina < CLEAR_COST:
+		_say("Too tired to shift the rubble.")
+		return false
+	_set_tile(p, FloorGen.Tile.FLOOR)
+	_say("You heave the rubble aside.")
+	_spend(CLEAR_COST)
+	_reveal()
+	_tick()
+	return true
+
+
+func _set_tile(p: Vector2i, t: int) -> void:
+	var tiles: PackedByteArray = floor_data["tiles"]
+	tiles[p.y * FloorGen.SIZE.x + p.x] = t
+	floor_data["tiles"] = tiles
+
+
 func _spend(amount: int) -> void:
 	stamina = maxi(0, stamina - amount)
 	if stamina == 0 and state == "exploring":
@@ -359,7 +421,7 @@ func _tick() -> void:
 		for d: Vector2i in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:
 			var n := pos + d
 			var plain := FloorGen.tile_at(floor_data, n) == FloorGen.Tile.FLOOR
-			if plain and n != player and creature_at(n) < 0:
+			if plain and n != player and _creature_at(n) < 0:
 				options.append(n)
 		if options.is_empty():
 			continue
@@ -381,27 +443,155 @@ func _tick() -> void:
 			_spend(BITE_COST)
 			if is_over():
 				return
+	_shift_streams()
+	_shift_tomb()
+	_reveal()
 
 
-## Lights tiles within SIGHT, except inside other chambers: you can't see past a drop, only
-## guess from the hint at the tunnel mouth. Stepping into a chamber shows all of it.
+# ---- the shifting tomb (D32) --------------------------------------------------------------
+
+
+func _shift_streams() -> void:
+	if ticks % STREAM_SHIFT != 0:
+		return
+	for st in streams:
+		var rect: Rect2i = floor_data["chambers"][st["chamber"]]["rect"]
+		var lo := rect.position.x + FloorGen.STREAM_MIN_X
+		var hi := rect.position.x + FloorGen.STREAM_MAX_X
+		if st["x"] + st["dir"] < lo or st["x"] + st["dir"] > hi:
+			st["dir"] = -st["dir"]
+		var old_x: int = st["x"]
+		st["x"] = old_x + st["dir"]
+		for y in range(rect.position.y, rect.end.y):
+			if FloorGen.tile_at(floor_data, Vector2i(old_x, y)) == FloorGen.Tile.WATER:
+				_set_tile(Vector2i(old_x, y), FloorGen.Tile.FLOOR)
+			if FloorGen.tile_at(floor_data, Vector2i(st["x"], y)) == FloorGen.Tile.FLOOR:
+				_set_tile(Vector2i(st["x"], y), FloorGen.Tile.WATER)
+		if st["chamber"] == FloorGen.chamber_at(floor_data, player):
+			_say("The stream shifts its course.")
+
+
+## Lands a rumble whose warning has run out, or maybe starts a new one.
+func _shift_tomb() -> void:
+	if not rumble.is_empty():
+		rumble["ticks"] -= 1
+		if rumble["ticks"] <= 0:
+			_land(rumble)
+			rumble = {}
+		return
+	if quakes and _quake_rng.chance(QUAKE_CHANCE + QUAKE_PER_FLOOR * depth):
+		start_rumble("collapse" if _quake_rng.chance(0.4) else "rockfall")
+
+
+## Announces a rockfall near the player or a collapse in a tunnel ahead. Returns whether one
+## started (there may be nowhere for it to happen).
+func start_rumble(kind: String) -> bool:
+	if kind == "collapse":
+		var t := _collapsible_tunnel()
+		if t >= 0:
+			var path: Array = floor_data["tunnels"][t]["path"]
+			rumble = {
+				"kind": "collapse",
+				"tunnel": t,
+				"tiles": path.slice(0, COLLAPSE_LENGTH),
+				"ticks": WARN_TICKS + 1,
+			}
+			_say("A deep groan from one of the tunnels ahead...")
+			return true
+	var tiles := _rockfall_tiles()
+	if tiles.is_empty():
+		return false
+	rumble = {"kind": "rockfall", "tiles": tiles, "ticks": WARN_TICKS}
+	_say("Dust trickles from the ceiling. Something's coming down!")
+	return true
+
+
+func _land(r: Dictionary) -> void:
+	var hit := false
+	for p: Vector2i in r["tiles"]:
+		if p == player:
+			hit = true
+			continue
+		if _creature_at(p) >= 0 or nodes.has(p) or spot_at(p) >= 0:
+			continue
+		_set_tile(p, FloorGen.Tile.RUBBLE)
+	if r["kind"] == "collapse":
+		collapsed[r["tunnel"]] = true
+		_say("A tunnel ahead caves in with a roar.")
+	else:
+		_say("Rocks crash down!")
+	if hit:
+		_say("Struck by falling rock! -%d stamina." % ROCK_HIT)
+		_spend(ROCK_HIT)
+
+
+## A tunnel leading on from here that may cave in: not one you're in, not already caved in,
+## and never the last open way on.
+func _collapsible_tunnel() -> int:
+	var here := current_chamber()
+	var open_ways: Array[int] = []
+	var tunnels: Array = floor_data["tunnels"]
+	for i in tunnels.size():
+		if tunnels[i]["from"] == here and not collapsed.has(i):
+			open_ways.append(i)
+	if open_ways.size() < 2:
+		return -1
+	var choices := open_ways.filter(
+		func(i: int) -> bool: return not (tunnels[i]["path"] as Array).has(player)
+	)
+	return _quake_rng.pick(choices) if not choices.is_empty() else -1
+
+
+## A cross of tiles near the player, in the open, never on the rope or the way down.
+func _rockfall_tiles() -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	var near: Array[Vector2i] = []
+	for p: Vector2i in lit:
+		var d := _manhattan(p, player)
+		if d >= 1 and d <= 3 and FloorGen.tile_at(floor_data, p) == FloorGen.Tile.FLOOR:
+			near.append(p)
+	if near.is_empty():
+		return out
+	var centre: Vector2i = _quake_rng.pick(near)
+	for d: Vector2i in [Vector2i.ZERO, Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:
+		var p := centre + d
+		if FloorGen.tile_at(floor_data, p) != FloorGen.Tile.FLOOR:
+			continue
+		if p == floor_data["entry"] or (floor_data["exits"] as Array).has(p):
+			continue
+		out.append(p)
+	return out
+
+
+## Lights what the player's lamp reaches: tiles within SIGHT steps of open ground, and the walls
+## around them. Light doesn't pass into other chambers: you can't see past a drop, only guess
+## from the hint at the tunnel mouth. Nothing stays lit behind you.
 func _reveal() -> void:
 	var here := FloorGen.chamber_at(floor_data, player)
-	for dy in range(-SIGHT, SIGHT + 1):
-		for dx in range(-SIGHT, SIGHT + 1):
-			var p := player + Vector2i(dx, dy)
-			if absi(dx) + absi(dy) > SIGHT:
+	lit = {player: true}
+	var dist := {player: 0}
+	var queue: Array[Vector2i] = [player]
+	var head := 0
+	while head < queue.size():
+		var p := queue[head]
+		head += 1
+		for d: Vector2i in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:
+			var n := p + d
+			if dist.has(n):
 				continue
-			var c := FloorGen.chamber_at(floor_data, p)
-			if c < 0 or c == here:
-				seen[p] = true
-	if here >= 0:
-		var rect: Rect2i = floor_data["chambers"][here]["rect"]
-		for y in range(rect.position.y - 1, rect.end.y + 1):
-			for x in range(rect.position.x - 1, rect.end.x + 1):
-				seen[Vector2i(x, y)] = true
+			var c := FloorGen.chamber_at(floor_data, n)
+			if c >= 0 and c != here:
+				continue
+			if dist[p] + 1 > SIGHT:
+				continue
+			lit[n] = true
+			if FloorGen.open(FloorGen.tile_at(floor_data, n)):
+				dist[n] = dist[p] + 1
+				queue.append(n)
+	for p: Vector2i in lit:
+		seen[p] = true
 	for s in spots:
-		if s["has_sign"] and seen.has(s["pos"]) and _manhattan(s["pos"], player) <= SIGHT:
+		if s["has_sign"] and lit.has(s["pos"]):
 			s["noticed"] = true
 
 
@@ -409,13 +599,13 @@ func _say(line: String) -> void:
 	log_lines.append(line)
 
 
-## Tiles in a chamber where things can go: its inner rows, never a pillar or the middle, so
-## nothing blocks the rows that tunnels use.
+## Tiles in a chamber where things can go: rows 2 and 6, never a pillar or water, so nothing
+## blocks the rows that tunnels use.
 func _places(chamber: Dictionary) -> Array:
 	var out: Array = []
 	var rect: Rect2i = chamber["rect"]
-	for y: int in [rect.position.y + 1, rect.end.y - 2]:
-		for x in range(rect.position.x + 1, rect.end.x - 1):
+	for y: int in [rect.position.y + 2, rect.position.y + 6]:
+		for x in range(rect.position.x + 2, rect.end.x - 2):
 			var p := Vector2i(x, y)
 			if FloorGen.tile_at(floor_data, p) == FloorGen.Tile.FLOOR:
 				out.append(p)
