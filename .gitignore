@@ -1,0 +1,11 @@
+# Godot
+.godot/
+*.import.tmp
+export/
+build/
+*.translation
+
+# OS and editors
+.DS_Store
+*.tmp
+.vscode/

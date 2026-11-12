@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  GODOT_VERSION: 4.7.2-stable
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash  # explicit bash enables pipefail, so `| tee` keeps Godot's exit code
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint and format check
+        run: |
+          pip install "gdtoolkit==4.*"
+          gdformat --check .
+          gdlint .
+
+      - name: Install Godot ${{ env.GODOT_VERSION }}
+        run: |
+          curl -fsSL -o godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip"
+          unzip -q godot.zip
+          sudo mv "Godot_v${GODOT_VERSION}_linux.x86_64" /usr/local/bin/godot
+          rm godot.zip
+          godot --version
+
+      - name: Import project
+        run: |
+          godot --headless --import 2>&1 | tee import.log
+          if grep -qE "SCRIPT ERROR|Parse Error|Failed to load script" import.log; then
+            echo "::error::Script errors while importing"; exit 1
+          fi
+
+      - name: Run tests
+        run: |
+          godot --headless -s res://tests/run_tests.gd 2>&1 | tee test.log
+          if grep -qE "SCRIPT ERROR|Parse Error" test.log; then
+            echo "::error::Script errors while running tests"; exit 1
+          fi
