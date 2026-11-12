@@ -91,10 +91,8 @@ func can_use(i: int, tool: String, stamina: int) -> bool:
 
 ## Why a tool can't be used at tile i, in words for the player, or "" if it can.
 func why_not(i: int, tool: String, stamina: int) -> String:
-	if lifted:
-		return "The find is already lifted"
-	if i < 0 or i >= tiles.size():
-		return "Off the dig"
+	if lifted or i < 0 or i >= tiles.size():
+		return "The find is already lifted" if lifted else "Off the dig"
 	if stamina < COST[tool]:
 		return "Too tired: %s needs %d stamina, you have %d" % [tool, COST[tool], stamina]
 	if tool == "probe":
