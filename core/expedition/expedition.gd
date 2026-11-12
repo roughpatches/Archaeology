@@ -23,6 +23,8 @@ const BITE_COST := 10
 const STUN_TICKS := 3
 ## Chance a dig spot shows surface signs. The rest only show up on a survey.
 const SIGN_CHANCE := 0.6
+const SPRING_GAIN := 15
+const MAX_STAMINA := 100
 
 ## Placeholder finds by rarity. Names are placeholders (D10).
 const FINDS := {
@@ -53,6 +55,10 @@ var spots: Array[Dictionary] = []
 var nodes: Array[Vector2i] = []
 ## Creatures: {pos, flee, stun}.
 var creatures: Array[Dictionary] = []
+## Springs not yet drunk from (Vector2i). Step on one to get SPRING_GAIN stamina back.
+var springs: Array[Vector2i] = []
+## Tunnels whose hint a survey has checked (tunnel index -> true). Checked hints are always right.
+var confirmed := {}
 
 var _rng: SeededRng
 
@@ -65,44 +71,41 @@ func _init(p_seed: int = 0, p_stamina: int = 100) -> void:
 
 func enter_floor(d: int) -> void:
 	depth = d
-	floor_data = FloorGen.generate(SeededRng.derive(seed_value, ["floor", d]))
+	floor_data = FloorGen.generate(SeededRng.derive(seed_value, ["floor", d]), d)
 	_rng = SeededRng.new(SeededRng.derive(seed_value, ["contents", d]))
 	player = floor_data["entry"]
 	seen = {}
 	spots = []
 	nodes = []
 	creatures = []
-	var entry: Vector2i = floor_data["entry"]
-	var open: Array = floor_data["open"]
-	var near_ok := func(p: Vector2i, min_d: int) -> bool: return _manhattan(p, entry) >= min_d
-	var used := {}
-	for p: Vector2i in open:
-		if spots.size() >= 2 + d / 2:
-			break
-		if near_ok.call(p, 4) and not _near_used(used, p):
-			var rarity := RARITIES[_rng.weighted_index(_rarity_weights(d))]
-			var find_id: String = _rng.pick(FINDS[rarity])
-			var dig := DigSpot.new(
-				SeededRng.derive(seed_value, ["dig", d, spots.size()]), find_id, rarity
-			)
-			spots.append(
-				{"pos": p, "has_sign": _rng.chance(SIGN_CHANCE), "noticed": false, "dig": dig}
-			)
-			used[p] = true
-	for p: Vector2i in open:
-		if nodes.size() >= 2:
-			break
-		if near_ok.call(p, 3) and not _near_used(used, p):
-			nodes.append(p)
-			used[p] = true
-	for p: Vector2i in open:
-		if creatures.size() >= d - 1:
-			break
-		if near_ok.call(p, 9) and not used.has(p):
-			creatures.append({"pos": p, "flee": 0, "stun": 0})
-			used[p] = true
+	springs = []
+	confirmed = {}
+	for i in floor_data["chambers"].size():
+		var chamber: Dictionary = floor_data["chambers"][i]
+		var places: Array = _rng.shuffled(_places(chamber))
+		match chamber["kind"]:
+			"dig":
+				var rarity := RARITIES[_rng.weighted_index(_rarity_weights(d))]
+				var find_id: String = _rng.pick(FINDS[rarity])
+				var dig := DigSpot.new(SeededRng.derive(seed_value, ["dig", d, i]), find_id, rarity)
+				spots.append(
+					{
+						"pos": places[0],
+						"has_sign": _rng.chance(SIGN_CHANCE),
+						"noticed": false,
+						"dig": dig
+					}
+				)
+			"crystal":
+				nodes.append(places[0])
+				nodes.append(places[1])
+			"creature":
+				for k in 1 if d < 4 else 2:
+					creatures.append({"pos": places[k], "flee": 0, "stun": 0})
+			"spring":
+				springs.append(places[0])
 	_reveal()
-	_say("Floor %d." % d)
+	_say("Floor %d. Tunnels branch ahead; every drop is one way." % d)
 
 
 # ---- reading the state ------------------------------------------------------------------
@@ -135,7 +138,7 @@ func hunted() -> bool:
 
 
 func on_exit() -> bool:
-	return player == floor_data["exit"]
+	return (floor_data["exits"] as Array).has(player)
 
 
 func on_entry() -> bool:
@@ -144,6 +147,32 @@ func on_entry() -> bool:
 
 func is_over() -> bool:
 	return state != "exploring"
+
+
+## The chamber the player is in, or the one whose tunnel they are walking down.
+func current_chamber() -> int:
+	var c := FloorGen.chamber_at(floor_data, player)
+	if c >= 0:
+		return c
+	var t := FloorGen.tunnel_at(floor_data, player)
+	return floor_data["tunnels"][t]["from"] if t >= 0 else -1
+
+
+## Standing on the lip of a drop.
+func on_ledge() -> bool:
+	return FloorGen.tile_at(floor_data, player) == FloorGen.Tile.LEDGE
+
+
+## What each tunnel mouth seems to say: {pos, text, checked}. A checked hint is the truth.
+func tunnel_hints() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var tunnels: Array = floor_data["tunnels"]
+	for i in tunnels.size():
+		var t: Dictionary = tunnels[i]
+		var checked := confirmed.has(i)
+		var kind: String = floor_data["chambers"][t["to"]]["kind"] if checked else t["hint"]
+		out.append({"pos": t["mouth"], "text": FloorGen.HINTS[kind], "checked": checked})
+	return out
 
 
 # ---- acting -----------------------------------------------------------------------------
@@ -157,16 +186,28 @@ func move(dir: Vector2i) -> bool:
 	var node := nodes.find(target)
 	if node >= 0:
 		return _mine(node)
-	if not FloorGen.walkable(floor_data, target) or creature_at(target) >= 0:
+	if not FloorGen.can_step(floor_data, player, dir) or creature_at(target) >= 0:
 		return false
+	var dropping := on_ledge() and dir == Vector2i.RIGHT
 	player = target
+	if dropping:
+		_say("You slide down the drop. No way back up.")
+	elif on_ledge():
+		_say("A drop. Step forward and there's no climbing back.")
+	var spring := springs.find(player)
+	if spring >= 0:
+		springs.remove_at(spring)
+		var gain := mini(SPRING_GAIN, MAX_STAMINA - stamina)
+		stamina += gain
+		_say("Cold spring water. +%d stamina." % gain)
 	_reveal()
 	_tick()
 	return true
 
 
 ## A survey reading: reveals every dig spot within SURVEY_RADIUS and maps them, so their finds
-## come out documented and their digs show the find's outline.
+## come out documented and their digs show the find's outline. It also checks the hints of the
+## tunnels leading on from this chamber.
 func survey() -> bool:
 	if is_over() or stamina < SURVEY_COST:
 		return false
@@ -176,7 +217,17 @@ func survey() -> bool:
 			s["noticed"] = true
 			s["dig"].surveyed = true
 			found += 1
-	_say("Survey: %d dig spot%s mapped nearby." % [found, "" if found == 1 else "s"])
+	var here := current_chamber()
+	var tunnels: Array = floor_data["tunnels"]
+	for i in tunnels.size():
+		if tunnels[i]["from"] == here:
+			confirmed[i] = true
+	_say(
+		(
+			"Survey: %d dig spot%s mapped nearby; the ways ahead read true."
+			% [found, "" if found == 1 else "s"]
+		)
+	)
 	_spend(SURVEY_COST)
 	_tick()
 	return true
@@ -196,7 +247,11 @@ func use_flare() -> bool:
 	return true
 
 
-## Takes the way down, if standing on it.
+func can_climb_out() -> bool:
+	return on_entry() or (on_exit() and depth >= FLOORS)
+
+
+## Takes the way down, if standing on it. The last floor has no way down.
 func descend() -> bool:
 	if is_over() or not on_exit() or depth >= FLOORS or stamina < DESCEND_COST:
 		return false
@@ -206,9 +261,10 @@ func descend() -> bool:
 	return true
 
 
-## Climbs the rope out, if standing on it. Ends the expedition with everything in the bag.
+## Climbs out, from the rope at the landing or from the far end of the last floor. Ends the
+## expedition with everything in the bag.
 func climb_out() -> bool:
-	if is_over() or not on_entry():
+	if is_over() or not can_climb_out():
 		return false
 	state = "climbed_out"
 	_say("You climb out with %d item%s." % [bag.size(), "" if bag.size() == 1 else "s"])
@@ -302,7 +358,8 @@ func _tick() -> void:
 		var options: Array[Vector2i] = []
 		for d: Vector2i in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:
 			var n := pos + d
-			if FloorGen.walkable(floor_data, n) and n != player and creature_at(n) < 0:
+			var plain := FloorGen.tile_at(floor_data, n) == FloorGen.Tile.FLOOR
+			if plain and n != player and creature_at(n) < 0:
 				options.append(n)
 		if options.is_empty():
 			continue
@@ -326,13 +383,25 @@ func _tick() -> void:
 				return
 
 
+## Lights tiles within SIGHT, except inside other chambers: you can't see past a drop, only
+## guess from the hint at the tunnel mouth. Stepping into a chamber shows all of it.
 func _reveal() -> void:
+	var here := FloorGen.chamber_at(floor_data, player)
 	for dy in range(-SIGHT, SIGHT + 1):
 		for dx in range(-SIGHT, SIGHT + 1):
-			if absi(dx) + absi(dy) <= SIGHT:
-				seen[player + Vector2i(dx, dy)] = true
+			var p := player + Vector2i(dx, dy)
+			if absi(dx) + absi(dy) > SIGHT:
+				continue
+			var c := FloorGen.chamber_at(floor_data, p)
+			if c < 0 or c == here:
+				seen[p] = true
+	if here >= 0:
+		var rect: Rect2i = floor_data["chambers"][here]["rect"]
+		for y in range(rect.position.y - 1, rect.end.y + 1):
+			for x in range(rect.position.x - 1, rect.end.x + 1):
+				seen[Vector2i(x, y)] = true
 	for s in spots:
-		if s["has_sign"] and _manhattan(s["pos"], player) <= SIGHT:
+		if s["has_sign"] and seen.has(s["pos"]) and _manhattan(s["pos"], player) <= SIGHT:
 			s["noticed"] = true
 
 
@@ -340,11 +409,17 @@ func _say(line: String) -> void:
 	log_lines.append(line)
 
 
-func _near_used(used: Dictionary, p: Vector2i) -> bool:
-	for q: Vector2i in used:
-		if _manhattan(p, q) < 3:
-			return true
-	return false
+## Tiles in a chamber where things can go: its inner rows, never a pillar or the middle, so
+## nothing blocks the rows that tunnels use.
+func _places(chamber: Dictionary) -> Array:
+	var out: Array = []
+	var rect: Rect2i = chamber["rect"]
+	for y: int in [rect.position.y + 1, rect.end.y - 2]:
+		for x in range(rect.position.x + 1, rect.end.x - 1):
+			var p := Vector2i(x, y)
+			if FloorGen.tile_at(floor_data, p) == FloorGen.Tile.FLOOR:
+				out.append(p)
+	return out
 
 
 static func _rarity_weights(d: int) -> Array:

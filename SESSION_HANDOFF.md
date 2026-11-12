@@ -1,7 +1,7 @@
 # Session handoff
 
 **Phase:** 3, feel prototype. The game was rescoped on 12 Nov 2026 (D19 to D27). The Godot setup
-is merged; the expedition gray-box (D28, D29, FEEL_EXPEDITION.md) is built and waiting for a
+is merged; the expedition gray-box (D28, D29, D31 branching tunnels, FEEL_EXPEDITION.md) is built and waiting for a
 playtest.
 
 ## Shipped so far

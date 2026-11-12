@@ -1,90 +1,154 @@
 extends RefCounted
-## Builds one expedition floor from hand-made room pieces, the same way for the same seed.
+## Builds one expedition floor as branching tunnels, the same way for the same seed.
 ##
-## The floor is a 3 x 3 grid of cells. Each cell holds one room piece (ROOM_PIECES, 9 x 7).
-## Rooms are joined along a random spanning tree plus one extra link, so every room can be
-## reached and there is usually more than one way round. The rope up is in a random room;
-## the way down is in the room farthest from it.
+## A floor runs left to right through LAYERS layers of chambers. Layer 0 is the landing (the
+## rope up). Each later layer has chambers in some of SLOTS rows. Tunnels join each chamber to
+## one or more chambers in the next layer, so the player keeps choosing which way to go on.
+## Every tunnel ends in a drop (a LEDGE tile) into the next chamber: once you step off it there
+## is no climbing back, so each fork is a commitment. Every chamber in the last layer has the
+## way down. Each chamber holds one kind of thing (KINDS), and each tunnel mouth shows a hint
+## of what is beyond it that is right HINT_ACCURACY of the time.
 
-enum Tile { WALL, FLOOR, PILLAR }
+enum Tile { WALL, FLOOR, PILLAR, LEDGE }
 
 const SeededRng := preload("res://core/seeded_rng.gd")
 
-const GRID := Vector2i(3, 3)
-const ROOM := Vector2i(9, 7)
-## A cell is a room plus a one-tile wall on its right and bottom.
-const CELL := Vector2i(ROOM.x + 1, ROOM.y + 1)
-const SIZE := Vector2i(GRID.x * CELL.x + 1, GRID.y * CELL.y + 1)
+const LAYERS := 5
+const SLOTS := 3
+const CHAMBER := Vector2i(7, 5)
+## Distance from one layer's chambers to the next, and from one slot's to the next.
+const LAYER_STEP := 14
+const SLOT_STEP := 9
+const SIZE := Vector2i(
+	1 + (LAYERS - 1) * LAYER_STEP + CHAMBER.x + 1, 1 + (SLOTS - 1) * SLOT_STEP + CHAMBER.y + 1
+)
+## Column (relative to the chamber's left edge) where a tunnel to another row turns.
+const TURN_X := CHAMBER.x + 3
 
-## Hand-made room pieces. "." floor, "#" pillar (blocks walking). Keep the middle tile
-## and the middle of each edge open: rope, stairs and doors go there.
-const ROOM_PIECES: Array[String] = [
-	".........\n.........\n.........\n.........\n.........\n.........\n.........",
-	".........\n.#.....#.\n.........\n.........\n.........\n.#.....#.\n.........",
-	".........\n.........\n..##.##..\n.........\n..##.##..\n.........\n.........",
-	"..#...#..\n..#...#..\n.........\n.........\n.........\n..#...#..\n..#...#..",
-	".........\n.##...##.\n.#.....#.\n.........\n.#.....#.\n.##...##.\n.........",
-]
+const KINDS: Array[String] = ["dig", "crystal", "creature", "spring", "empty"]
+const HINTS := {
+	"dig": "old stonework",
+	"crystal": "a glint",
+	"creature": "scratching",
+	"spring": "trickling water",
+	"empty": "still air",
+}
+const HINT_ACCURACY := 0.65
+## Chance of each extra forward tunnel beyond the ones every chamber needs.
+const EXTRA_TUNNEL_CHANCE := 0.6
+
+## Slots that layers 1 .. LAYERS-2 may use (always two or more chambers), and the last layer.
+const MIDDLE_SLOTS := [[0, 1], [1, 2], [0, 2], [0, 1, 2], [0, 1, 2]]
+const LAST_SLOTS := [[1], [0, 2], [0, 1, 2]]
 
 
-## Returns {size: Vector2i, tiles: PackedByteArray (Tile values, row-major), entry: Vector2i,
-## exit: Vector2i, rooms: Array[Vector2i] (top-left floor tile of each cell's room),
-## open: Array[Vector2i] (floor tiles with nothing special on them, for placing things)}.
-static func generate(seed_value: int) -> Dictionary:
+## Returns {
+##   size: Vector2i, tiles: PackedByteArray (Tile values, row-major),
+##   chambers: Array of {layer, slot, rect: Rect2i, centre: Vector2i, kind: String},
+##   tunnels: Array of {from, to (chamber indices), path: Array[Vector2i] (mouth first, ledge
+##     last), mouth: Vector2i, ledge: Vector2i, hint: String (a KINDS value)},
+##   entry: Vector2i (the landing, chamber 0's centre), exits: Array[Vector2i] (way down),
+## }.
+static func generate(seed_value: int, depth: int = 1) -> Dictionary:
 	var rng := SeededRng.new(seed_value)
 	var tiles := PackedByteArray()
 	tiles.resize(SIZE.x * SIZE.y)
 	tiles.fill(Tile.WALL)
 
-	var rooms: Array[Vector2i] = []
-	for cy in GRID.y:
-		for cx in GRID.x:
-			var origin := Vector2i(cx * CELL.x + 1, cy * CELL.y + 1)
-			rooms.append(origin)
-			var rows: PackedStringArray = (rng.pick(ROOM_PIECES) as String).split("\n")
-			for y in ROOM.y:
-				for x in ROOM.x:
-					var t := Tile.PILLAR if rows[y][x] == "#" else Tile.FLOOR
-					tiles[_index(origin + Vector2i(x, y))] = t
+	var chambers: Array[Dictionary] = []
+	var by_layer: Array = []
+	for layer in LAYERS:
+		var slots: Array = [1]
+		if layer == LAYERS - 1:
+			slots = rng.pick(LAST_SLOTS)
+		elif layer > 0:
+			slots = rng.pick(MIDDLE_SLOTS)
+		var ids: Array[int] = []
+		for slot: int in slots:
+			ids.append(chambers.size())
+			chambers.append(_make_chamber(tiles, rng, layer, slot, depth))
+		by_layer.append(ids)
+	chambers[0]["kind"] = "empty"
+	_ensure_a_dig(chambers, rng)
 
-	for link in _links(rng):
-		_carve_door(tiles, link[0], link[1])
+	var tunnels: Array[Dictionary] = []
+	for layer in LAYERS - 1:
+		for link: Array in _links(rng, chambers, by_layer[layer], by_layer[layer + 1], layer == 0):
+			var tunnel := _carve_tunnel(tiles, chambers[link[0]], chambers[link[1]])
+			tunnel["from"] = link[0]
+			tunnel["to"] = link[1]
+			var kind: String = chambers[link[1]]["kind"]
+			if not rng.chance(HINT_ACCURACY):
+				# A wrong hint is still something this floor could hold.
+				var weights := kind_weights(depth)
+				var others := KINDS.filter(
+					func(k: String) -> bool: return k != kind and weights[KINDS.find(k)] > 0
+				)
+				kind = rng.pick(others)
+			tunnel["hint"] = kind
+			tunnels.append(tunnel)
 
-	var entry_cell := rng.range_int(0, rooms.size() - 1)
-	var exit_cell := _farthest_cell(tiles, rooms, entry_cell)
-	var entry := rooms[entry_cell] + Vector2i(ROOM.x / 2, ROOM.y / 2)
-	var exit := rooms[exit_cell] + Vector2i(ROOM.x / 2, ROOM.y / 2)
-
-	var open: Array[Vector2i] = []
-	for y in SIZE.y:
-		for x in SIZE.x:
-			var p := Vector2i(x, y)
-			if tiles[_index(p)] == Tile.FLOOR and p != entry and p != exit:
-				open.append(p)
+	var exits: Array[Vector2i] = []
+	for i: int in by_layer[LAYERS - 1]:
+		exits.append(chambers[i]["centre"])
 	return {
 		"size": SIZE,
 		"tiles": tiles,
-		"entry": entry,
-		"exit": exit,
-		"rooms": rooms,
-		"open": rng.shuffled(open),
+		"chambers": chambers,
+		"tunnels": tunnels,
+		"entry": chambers[0]["centre"],
+		"exits": exits,
 	}
 
 
-static func walkable(floor_data: Dictionary, p: Vector2i) -> bool:
+static func tile_at(floor_data: Dictionary, p: Vector2i) -> int:
 	if p.x < 0 or p.y < 0 or p.x >= SIZE.x or p.y >= SIZE.y:
-		return false
+		return Tile.WALL
 	var tiles: PackedByteArray = floor_data["tiles"]
-	return tiles[_index(p)] == Tile.FLOOR
+	return tiles[_index(p)]
 
 
-## Steps between two tiles walking round walls, or -1 if there is no way.
+## Ground you can stand on (floor or the lip of a drop).
+static func walkable(floor_data: Dictionary, p: Vector2i) -> bool:
+	var t := tile_at(floor_data, p)
+	return t == Tile.FLOOR or t == Tile.LEDGE
+
+
+## Whether the player may step from `from` in direction `dir`. Drops only go forward: you can
+## never step onto a ledge from the chamber below it.
+static func can_step(floor_data: Dictionary, from: Vector2i, dir: Vector2i) -> bool:
+	var to := from + dir
+	if not walkable(floor_data, to):
+		return false
+	return not (tile_at(floor_data, to) == Tile.LEDGE and dir == Vector2i.LEFT)
+
+
+## Index of the chamber containing p, or -1 (in a tunnel or rock).
+static func chamber_at(floor_data: Dictionary, p: Vector2i) -> int:
+	var chambers: Array = floor_data["chambers"]
+	for i in chambers.size():
+		if (chambers[i]["rect"] as Rect2i).has_point(p):
+			return i
+	return -1
+
+
+## Index of the tunnel whose path contains p, or -1.
+static func tunnel_at(floor_data: Dictionary, p: Vector2i) -> int:
+	var tunnels: Array = floor_data["tunnels"]
+	for i in tunnels.size():
+		if (tunnels[i]["path"] as Array).has(p):
+			return i
+	return -1
+
+
+## Steps between two tiles walking round walls, or -1 if there is no way (ignores drops).
 static func distance(floor_data: Dictionary, from: Vector2i, to: Vector2i) -> int:
 	var dist := bfs(floor_data["tiles"], from)
 	return dist.get(to, -1)
 
 
-## Breadth-first distances from a tile over walkable ground.
+## Breadth-first distances from a tile over plain floor. Ledges are left out, so creatures
+## never cross a drop.
 static func bfs(tiles: PackedByteArray, from: Vector2i) -> Dictionary:
 	var dist := {from: 0}
 	var queue: Array[Vector2i] = [from]
@@ -103,73 +167,137 @@ static func bfs(tiles: PackedByteArray, from: Vector2i) -> Dictionary:
 	return dist
 
 
+## Tiles the player can reach from `from`, following the one-way drops.
+static func reachable(floor_data: Dictionary, from: Vector2i) -> Dictionary:
+	var seen := {from: true}
+	var queue: Array[Vector2i] = [from]
+	var head := 0
+	while head < queue.size():
+		var p := queue[head]
+		head += 1
+		for d: Vector2i in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:
+			var n := p + d
+			if not seen.has(n) and can_step(floor_data, p, d):
+				seen[n] = true
+				queue.append(n)
+	return seen
+
+
 static func _index(p: Vector2i) -> int:
 	return p.y * SIZE.x + p.x
 
 
-## Pairs of neighbouring cells to join: a random spanning tree plus one extra link.
-static func _links(rng: SeededRng) -> Array:
-	var all: Array = []
-	for cy in GRID.y:
-		for cx in GRID.x:
-			if cx + 1 < GRID.x:
-				all.append([Vector2i(cx, cy), Vector2i(cx + 1, cy)])
-			if cy + 1 < GRID.y:
-				all.append([Vector2i(cx, cy), Vector2i(cx, cy + 1)])
-	all = rng.shuffled(all)
-	# Kruskal's algorithm over the cells, with a simple union-find.
-	var parent := {}
-	for cy in GRID.y:
-		for cx in GRID.x:
-			parent[Vector2i(cx, cy)] = Vector2i(cx, cy)
+static func _origin(layer: int, slot: int) -> Vector2i:
+	return Vector2i(1 + layer * LAYER_STEP, 1 + slot * SLOT_STEP)
+
+
+## Carves a chamber: open floor with a few pillars on its inner rows. Rows 0, 2 and 4 stay
+## open from side to side, because tunnels leave and arrive on them.
+static func _make_chamber(
+	tiles: PackedByteArray, rng: SeededRng, layer: int, slot: int, depth: int
+) -> Dictionary:
+	var origin := _origin(layer, slot)
+	for y in CHAMBER.y:
+		for x in CHAMBER.x:
+			tiles[_index(origin + Vector2i(x, y))] = Tile.FLOOR
+	for p: Vector2i in [Vector2i(2, 1), Vector2i(4, 1), Vector2i(2, 3), Vector2i(4, 3)]:
+		if rng.chance(0.25):
+			tiles[_index(origin + p)] = Tile.PILLAR
+	return {
+		"layer": layer,
+		"slot": slot,
+		"rect": Rect2i(origin, CHAMBER),
+		"centre": origin + CHAMBER / 2,
+		"kind": KINDS[rng.weighted_index(kind_weights(depth))],
+	}
+
+
+## How likely each of KINDS is at a depth. No creatures on floor 1.
+static func kind_weights(depth: int) -> Array:
+	var creature := 0 if depth <= 1 else 8 + 6 * (depth - 2)
+	return [35, 25, creature, 12, 15]
+
+
+static func _ensure_a_dig(chambers: Array[Dictionary], rng: SeededRng) -> void:
+	for c in chambers:
+		if c["kind"] == "dig":
+			return
+	chambers[rng.range_int(1, chambers.size() - 1)]["kind"] = "dig"
+
+
+## Chooses which chambers of one layer lead to which of the next. Tunnels only go to the same
+## row or a neighbouring one, never cross, every chamber gets at least one way out and one way
+## in, and the landing (`fork`) gets two ways out where it can.
+static func _links(rng: SeededRng, chambers: Array, here: Array, ahead: Array, fork: bool) -> Array:
+	var candidates: Array = []
+	for a: int in here:
+		for b: int in ahead:
+			if absi(chambers[a]["slot"] - chambers[b]["slot"]) <= 1:
+				candidates.append([a, b])
+	candidates = rng.shuffled(candidates)
 	var chosen: Array = []
-	var spare: Array = []
-	for link: Array in all:
-		var a: Vector2i = _root(parent, link[0])
-		var b: Vector2i = _root(parent, link[1])
-		if a != b:
-			parent[a] = b
-			chosen.append(link)
-		else:
-			spare.append(link)
-	if not spare.is_empty():
-		chosen.append(spare[0])
+	for a: int in here:
+		_add_first(chambers, chosen, candidates.filter(func(l: Array) -> bool: return l[0] == a))
+	for b: int in ahead:
+		if not chosen.any(func(l: Array) -> bool: return l[1] == b):
+			_add_first(
+				chambers, chosen, candidates.filter(func(l: Array) -> bool: return l[1] == b)
+			)
+	for link: Array in candidates:
+		if chosen.has(link):
+			continue
+		var outs := chosen.filter(func(l: Array) -> bool: return l[0] == link[0]).size()
+		if (fork and outs < 2) or rng.chance(EXTRA_TUNNEL_CHANCE):
+			_add_first(chambers, chosen, [link])
 	return chosen
 
 
-static func _root(parent: Dictionary, c: Vector2i) -> Vector2i:
-	while parent[c] != c:
-		c = parent[c]
-	return c
+## Adds the first link in `options` that is new and crosses nothing already chosen.
+static func _add_first(chambers: Array, chosen: Array, options: Array) -> void:
+	for link: Array in options:
+		if chosen.has(link):
+			return
+		var crosses := chosen.any(
+			func(l: Array) -> bool:
+				return (
+					chambers[l[0]]["slot"] == chambers[link[1]]["slot"]
+					and chambers[l[1]]["slot"] == chambers[link[0]]["slot"]
+					and l[0] != link[0]
+				)
+		)
+		if not crosses:
+			chosen.append(link)
+			return
 
 
-## Opens a one-tile door in the wall between two neighbouring cells, at the room's middle.
-static func _carve_door(tiles: PackedByteArray, a: Vector2i, b: Vector2i) -> void:
-	var lo := Vector2i(mini(a.x, b.x), mini(a.y, b.y))
-	var origin := Vector2i(lo.x * CELL.x + 1, lo.y * CELL.y + 1)
-	if a.y == b.y:
-		var y := origin.y + ROOM.y / 2
-		var wall_x := origin.x + ROOM.x
-		tiles[_index(Vector2i(wall_x, y))] = Tile.FLOOR
-		# Clear the tiles either side, so a pillar never blocks a door.
-		tiles[_index(Vector2i(wall_x - 1, y))] = Tile.FLOOR
-		tiles[_index(Vector2i(wall_x + 1, y))] = Tile.FLOOR
+## Carves the tunnel from chamber a to chamber b in the next layer. Same row: straight along
+## the middle row. Next row down (up): leaves along a's bottom (top) row, turns at TURN_X and
+## arrives on b's top (bottom) row. The last tile is the ledge.
+static func _carve_tunnel(tiles: PackedByteArray, a: Dictionary, b: Dictionary) -> Dictionary:
+	var a_rect: Rect2i = a["rect"]
+	var b_rect: Rect2i = b["rect"]
+	var dy := signi(b["slot"] - a["slot"])
+	var half := CHAMBER.y / 2
+	var leave_y: int = a["centre"].y + dy * half
+	var arrive_y: int = b["centre"].y - dy * half
+	var start_x := a_rect.end.x
+	var turn_x := a_rect.position.x + TURN_X
+	var ledge_x := b_rect.position.x - 1
+	var path: Array[Vector2i] = []
+	if dy == 0:
+		for x in range(start_x, ledge_x + 1):
+			path.append(Vector2i(x, leave_y))
 	else:
-		var x := origin.x + ROOM.x / 2
-		var wall_y := origin.y + ROOM.y
-		tiles[_index(Vector2i(x, wall_y))] = Tile.FLOOR
-		tiles[_index(Vector2i(x, wall_y - 1))] = Tile.FLOOR
-		tiles[_index(Vector2i(x, wall_y + 1))] = Tile.FLOOR
-
-
-static func _farthest_cell(tiles: PackedByteArray, rooms: Array[Vector2i], from_cell: int) -> int:
-	var centre := Vector2i(ROOM.x / 2, ROOM.y / 2)
-	var dist := bfs(tiles, rooms[from_cell] + centre)
-	var best := from_cell
-	var best_d := -1
-	for i in rooms.size():
-		var d: int = dist.get(rooms[i] + centre, -1)
-		if d > best_d:
-			best_d = d
-			best = i
-	return best
+		for x in range(start_x, turn_x + 1):
+			path.append(Vector2i(x, leave_y))
+		var y := leave_y + dy
+		while y != arrive_y + dy:
+			path.append(Vector2i(turn_x, y))
+			y += dy
+		for x in range(turn_x + 1, ledge_x + 1):
+			path.append(Vector2i(x, arrive_y))
+	for p in path:
+		tiles[_index(p)] = Tile.FLOOR
+	var ledge: Vector2i = path[path.size() - 1]
+	tiles[_index(ledge)] = Tile.LEDGE
+	return {"path": path, "mouth": path[0], "ledge": ledge}

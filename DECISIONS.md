@@ -187,3 +187,14 @@ D30 — Shortcuts replace multi-day digs
 Status: PROPOSED, not in the gray-box. Supersedes D16 if Andrew agrees.
 Decision: Depth over several runs (a rope anchor every few floors) replaces digs that run over
 several days.
+
+D31 — Expedition floors are branching tunnels with one-way drops
+Status: PROVISIONAL (until playtest). Andrew asked for it (2026-11-12). Supersedes the floor
+layout in D28 (3 × 3 room pieces); D28's costs still hold.
+Decision: Each floor runs forward through 5 layers of chambers joined by tunnels that fork. Every
+tunnel ends in a drop into the next chamber, so once you take a fork you can't go back. You
+can't see into a chamber before you drop in; each tunnel mouth shows a hint of what is beyond
+(dig site, crystals, creature, spring, nothing) that is right 65% of the time, and a survey
+reading makes the hints from where you stand true. The rope up is at each floor's landing,
+before the first fork, and at the far end of the last floor. Springs give back 15 stamina.
+Why: The player should choose how to go on with limited, unreliable knowledge, and live with it.

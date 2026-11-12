@@ -1,7 +1,8 @@
 extends Node2D
 ## Gray-box expedition (FEEL_EXPEDITION.md). Coloured squares only; ` shows the debug overlay.
 ##
-## Explore: arrows/WASD move, Q survey, F flare, E use (rope, stairs, dig spot).
+## Explore: arrows/WASD move, Q survey, F flare, E use (rope, stairs, dig spot). Tunnels
+## branch; each ends in a one-way drop, and each mouth shows a hint (checked by a survey).
 ## Dig: 1-4 pick tool, click a tile, L lift, Esc or E back out.
 
 const Expedition := preload("res://core/expedition/expedition.gd")
@@ -25,6 +26,10 @@ const COLORS := {
 	"creature": Color("e8433a"),
 	"creature_flee": Color("ff9ccf"),
 	"creature_stun": Color("7a2a26"),
+	"ledge": Color("c9b48a"),
+	"spring": Color("3a7bd5"),
+	"hint": Color("d8cfc0"),
+	"hint_checked": Color("ffd84a"),
 }
 
 var run: Expedition
@@ -99,7 +104,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _interact() -> void:
-	if run.on_exit():
+	if run.on_exit() and run.depth < Expedition.FLOORS:
 		if not run.descend():
 			run.log_lines.append(
 				(
@@ -108,7 +113,7 @@ func _interact() -> void:
 					else "This is the deepest floor."
 				)
 			)
-	elif run.on_entry():
+	elif run.can_climb_out():
 		run.climb_out()
 	else:
 		var s := run.spot_at(run.player)
@@ -160,8 +165,10 @@ func _refresh() -> void:
 		lines.append(_result_text())
 	else:
 		var hint := "Move WASD  Q survey (%d)  F flare  E use" % Expedition.SURVEY_COST
-		if run.on_entry():
+		if run.can_climb_out():
 			hint += "   [rope: E climbs out]"
+		elif run.on_ledge():
+			hint += "   [drop: step on and there's no way back]"
 		elif run.on_exit():
 			hint += "   [stairs: E goes down, %d stamina]" % Expedition.DESCEND_COST
 		elif run.spot_at(run.player) >= 0:
@@ -206,13 +213,27 @@ func _draw() -> void:
 			var c: Color = COLORS["wall"]
 			if t == FloorGen.Tile.FLOOR:
 				c = COLORS["floor"]
+			elif t == FloorGen.Tile.LEDGE:
+				c = COLORS["ledge"]
 			elif t == FloorGen.Tile.PILLAR:
 				c = COLORS["pillar"]
 			if _dist(p) > Expedition.SIGHT:
 				c = c.darkened(0.45)
 			draw_rect(rect, c)
 	_mark(run.floor_data["entry"], COLORS["rope"], "rope")
-	_mark(run.floor_data["exit"], COLORS["stairs"], "down")
+	for e: Vector2i in run.floor_data["exits"]:
+		if run.depth >= Expedition.FLOORS:
+			_mark(e, COLORS["rope"], "rope")
+		else:
+			_mark(e, COLORS["stairs"], "down")
+	for t: Dictionary in run.floor_data["tunnels"]:
+		if run.seen.has(t["ledge"]):
+			_chevron(t["ledge"])
+	for sp in run.springs:
+		_mark(sp, COLORS["spring"], "")
+	for h in run.tunnel_hints():
+		if run.seen.has(h["pos"]):
+			_hint_label(h)
 	for s in run.spots:
 		if not s["noticed"]:
 			continue
@@ -224,7 +245,7 @@ func _draw() -> void:
 		if run.seen.has(n):
 			_mark(n, COLORS["node"], "")
 	for cr in run.creatures:
-		if _dist(cr["pos"]) <= Expedition.SIGHT:
+		if _dist(cr["pos"]) <= Expedition.SIGHT and run.seen.has(cr["pos"]):
 			var col: Color = COLORS["creature"]
 			if cr["flee"] > 0:
 				col = COLORS["creature_flee"]
@@ -252,6 +273,24 @@ func _mark(p: Vector2i, col: Color, label: String) -> void:
 			6,
 			col
 		)
+
+
+## The hint for a tunnel, written on the tunnel itself just past its mouth.
+func _hint_label(h: Dictionary) -> void:
+	var col: Color = COLORS["hint_checked"] if h["checked"] else COLORS["hint"]
+	var text: String = h["text"] if h["checked"] else h["text"] + "?"
+	var font := ThemeDB.fallback_font
+	var at := Vector2((h["pos"] + Vector2i.RIGHT) * TILE) + Vector2(1, 0)
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 6).x
+	draw_rect(Rect2(at + Vector2(-1, 4), Vector2(width + 2, 9)), Color(0, 0, 0, 0.75))
+	draw_string(font, at + Vector2(0, 11), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 6, col)
+
+
+## A ">" on a drop, pointing the only way it goes.
+func _chevron(p: Vector2i) -> void:
+	var o := Vector2(p * TILE)
+	var pts := PackedVector2Array([o + Vector2(5, 4), o + Vector2(11, 8), o + Vector2(5, 12)])
+	draw_polyline(pts, COLORS["wall"], 2.0)
 
 
 func _dist(p: Vector2i) -> int:

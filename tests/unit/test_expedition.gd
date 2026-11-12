@@ -15,10 +15,10 @@ func test_same_seed_same_floor_contents() -> void:
 		assert_eq(a.spots[i]["dig"].find_id, b.spots[i]["dig"].find_id)
 
 
-func test_first_floor_has_spots_and_no_creatures() -> void:
+func test_first_floor_has_a_spot_and_no_creatures() -> void:
 	for s in 10:
 		var e := Expedition.new(s)
-		assert_true(e.spots.size() >= 2, "seed %d spots" % s)
+		assert_true(e.spots.size() >= 1, "seed %d spots" % s)
 		assert_eq(e.creatures.size(), 0, "seed %d creatures" % s)
 
 
@@ -34,7 +34,7 @@ func test_survey_costs_stamina_and_maps_spots_in_range() -> void:
 
 func test_climb_out_only_from_the_rope() -> void:
 	var e := Expedition.new(4)
-	e.player = e.floor_data["exit"]
+	e.player = e.floor_data["exits"][0]
 	assert_false(e.climb_out())
 	e.player = e.floor_data["entry"]
 	assert_true(e.climb_out())
@@ -44,12 +44,11 @@ func test_climb_out_only_from_the_rope() -> void:
 
 func test_descend_goes_one_floor_deeper() -> void:
 	var e := Expedition.new(5)
-	e.player = e.floor_data["exit"]
+	e.player = e.floor_data["exits"][0]
 	assert_true(e.descend())
 	assert_eq(e.depth, 2)
 	assert_eq(e.stamina, 100 - Expedition.DESCEND_COST)
 	assert_eq(e.player, e.floor_data["entry"])
-	assert_eq(e.creatures.size(), 1)
 
 
 func test_running_out_of_stamina_collapses() -> void:
@@ -84,3 +83,64 @@ func test_flare_makes_nearby_creatures_flee() -> void:
 	assert_true(e.use_flare())
 	assert_eq(e.flares, Expedition.FLARES - 1)
 	assert_eq(e.creatures[0]["flee"], Expedition.FLEE_TICKS - 1, "fled one tick already")
+
+
+func test_last_floor_climbs_out_from_its_far_end() -> void:
+	var e := Expedition.new(10)
+	e.enter_floor(Expedition.FLOORS)
+	e.player = e.floor_data["exits"][0]
+	assert_false(e.descend(), "no deeper floor")
+	assert_true(e.climb_out())
+
+
+func test_stepping_off_a_drop_cannot_be_undone() -> void:
+	var e := Expedition.new(11)
+	e.creatures = []
+	var t: Dictionary = e.floor_data["tunnels"][0]
+	e.player = t["ledge"] + Vector2i.LEFT
+	assert_true(e.move(Vector2i.RIGHT), "onto the lip")
+	assert_true(e.on_ledge())
+	assert_true(e.move(Vector2i.LEFT), "can still turn back from the lip")
+	assert_true(e.move(Vector2i.RIGHT))
+	assert_true(e.move(Vector2i.RIGHT), "drop")
+	assert_eq(e.current_chamber(), t["to"])
+	assert_false(e.move(Vector2i.LEFT), "no climbing back")
+
+
+func test_you_cannot_see_into_a_chamber_before_you_drop_in() -> void:
+	var e := Expedition.new(12)
+	var t: Dictionary = e.floor_data["tunnels"][0]
+	e.player = t["ledge"]
+	e._reveal()
+	var below: Vector2i = t["ledge"] + Vector2i(2, 0)
+	assert_false(e.seen.has(below))
+	e.player = t["ledge"] + Vector2i.RIGHT
+	e._reveal()
+	assert_true(e.seen.has(below))
+
+
+func test_survey_checks_the_hints_of_the_ways_ahead() -> void:
+	var e := Expedition.new(13)
+	assert_true(e.survey())
+	var hints := e.tunnel_hints()
+	var tunnels: Array = e.floor_data["tunnels"]
+	for i in tunnels.size():
+		var kind: String = e.floor_data["chambers"][tunnels[i]["to"]]["kind"]
+		if tunnels[i]["from"] == 0:
+			assert_true(hints[i]["checked"])
+			assert_eq(hints[i]["text"], FloorGen.HINTS[kind])
+		else:
+			assert_false(hints[i]["checked"])
+
+
+func test_a_spring_gives_stamina_back_once() -> void:
+	var e := Expedition.new(14, 50)
+	e.creatures = []
+	e.nodes = []
+	var p := e.player + Vector2i.RIGHT
+	e.springs = [p]
+	assert_true(e.move(Vector2i.RIGHT))
+	assert_eq(e.stamina, 50 + Expedition.SPRING_GAIN)
+	e.move(Vector2i.LEFT)
+	e.move(Vector2i.RIGHT)
+	assert_eq(e.stamina, 50 + Expedition.SPRING_GAIN)
