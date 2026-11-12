@@ -168,3 +168,22 @@ Status: PROVISIONAL.
 Decision: A small in-repo test runner (`tests/run_tests.gd`) run headless, instead of the GUT
 add-on, for the setup phase. Revisit if tests need mocks, doubles or parameterised cases.
 Why: No add-on to vendor or keep in step with Godot versions; enough for pure `core/` tests.
+
+D28 — Expedition gray-box rules
+Status: PROVISIONAL (until playtest).
+Decision: 5 generated floors of 3 × 3 room pieces; walking free, actions cost stamina; survey
+reading 4, descend 3, mine 2, dig tools 3/1/2/1, lift 2, bite 10; bag of 8; two flares; collapse
+loses half the bag. Dig spots are 6 × 5 with one find; a survey maps nearby spots and makes their
+finds documented. Details in FEEL_EXPEDITION.md.
+Why: The smallest expedition with a real push-or-return choice and the dig inside it.
+
+D29 — Expeditions are turn-based
+Status: PROVISIONAL (until playtest).
+Decision: Every step or action is one tick; creatures move on ticks.
+Why: Fits "no clock, stamina is the limit" (D26) and makes digging next to a creature a choice
+rather than a reflex test. The playtest asks whether it should be real-time instead.
+
+D30 — Shortcuts replace multi-day digs
+Status: PROPOSED, not in the gray-box. Supersedes D16 if Andrew agrees.
+Decision: Depth over several runs (a rope anchor every few floors) replaces digs that run over
+several days.

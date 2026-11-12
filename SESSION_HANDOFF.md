@@ -1,7 +1,8 @@
 # Session handoff
 
-**Phase:** 2 to 3. The game was rescoped on 12 Nov 2026 (D19 to D27): one island, expeditions as
-the core verb, Godot. The Godot project is set up; the expedition feel prototype is next.
+**Phase:** 3, feel prototype. The game was rescoped on 12 Nov 2026 (D19 to D27). The Godot setup
+is merged; the expedition gray-box (D28, D29, FEEL_EXPEDITION.md) is built and waiting for a
+playtest.
 
 ## Shipped so far
 
@@ -11,18 +12,19 @@ the core verb, Godot. The Godot project is set up; the expedition feel prototype
 - The Phaser gray-box (dig v1 playtested and passed, dig v2 and survey built but not playtested)
   stays on its branch as a reference. Its feel specs are in `docs/phaser-prototype/`.
 
+- Expedition gray-box: `core/expedition/` (floor_gen, dig_spot, expedition) with tests, and
+  `scenes/expedition/` (explore view and dig view). Press X at the camp placeholder.
+
 ## Next
 
-1. Andrew opens the project in Godot 4.7.2 and confirms it runs.
-2. Feel spec for the expedition (FEEL_EXPEDITION.md): read, decide, feedback, and the numbers to
-   start from.
-3. Expedition gray-box: generated floors from room pieces, stamina and supplies, a dig spot with the
-   four tools and lifting, avoid-or-scare creatures, descend or turn back. Then a playtest.
+1. Andrew playtests the expedition and logs it in PLAYTEST_LOG.md (questions in
+   FEEL_EXPEDITION.md).
+2. Rework or pass. Then the overworld day gray-box: walk, gather, craft supplies, build, sleep.
 
 ## Open questions
 
 - D26: do overworld days still end when you sleep? (Assumed yes.)
-- Does depth over several runs (shortcuts) replace multi-day digs (D16)?
+- D30: does depth over several runs (shortcuts) replace multi-day digs (D16)?
 
 ## Known issues
 
