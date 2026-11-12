@@ -63,7 +63,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _use(i: int) -> void:
 	var events := run.dig_use(spot, i, tool)
 	if events.is_empty():
-		_say_flash("Can't (%s costs %d)" % [tool, DigSpot.COST[tool]], 1.0)
+		var dig: DigSpot = run.spots[spot]["dig"]
+		var reason := dig.why_not(i, tool, run.stamina)
+		_say_flash(reason if reason != "" else "Can't do that now", 1.6)
 	for e in events:
 		match e["kind"]:
 			"chipped":

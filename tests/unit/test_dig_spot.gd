@@ -62,3 +62,14 @@ func test_grade_condition() -> void:
 	assert_eq(DigSpot.grade_condition(4, 1), "intact")
 	assert_eq(DigSpot.grade_condition(4, 2), "worn")
 	assert_eq(DigSpot.grade_condition(4, 3), "fragment")
+
+
+func test_why_not_names_the_real_reason() -> void:
+	var d := DigSpot.new(3, "Jade bead", "common")
+	assert_eq(d.why_not(0, "brush", 10), "")
+	assert_true(d.why_not(0, "brush", 1).begins_with("Too tired"))
+	while d.tiles[0]["depth"] > 0:
+		d.use(0, "trowel")
+	assert_ne(d.why_not(0, "brush", 10), "")
+	assert_false(d.why_not(0, "brush", 10).begins_with("Too tired"), "not a stamina problem")
+	assert_false(d.can_use(0, "brush", 10))

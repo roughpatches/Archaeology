@@ -86,14 +86,33 @@ func shows_stain(i: int) -> bool:
 
 
 func can_use(i: int, tool: String, stamina: int) -> bool:
-	if i < 0 or i >= tiles.size() or stamina < COST[tool] or lifted:
-		return false
+	return why_not(i, tool, stamina) == ""
+
+
+## Why a tool can't be used at tile i, in words for the player, or "" if it can.
+func why_not(i: int, tool: String, stamina: int) -> String:
+	if lifted:
+		return "The find is already lifted"
+	if i < 0 or i >= tiles.size():
+		return "Off the dig"
+	if stamina < COST[tool]:
+		return "Too tired: %s needs %d stamina, you have %d" % [tool, COST[tool], stamina]
 	if tool == "probe":
-		return not tiles[i]["probed"] and tiles[i]["depth"] > 0
+		return _why_not_probe(i)
 	for j in area(i, tool):
 		if tiles[j]["depth"] > 0:
-			return true
-	return false
+			return ""
+	if tiles[i]["find"]:
+		return "That's the find: dig around it, or press L to lift"
+	return "Nothing left to dig there"
+
+
+func _why_not_probe(i: int) -> String:
+	if tiles[i]["probed"]:
+		return "Already probed there"
+	if tiles[i]["depth"] == 0:
+		return "Nothing left to probe there"
+	return ""
 
 
 ## Uses a tool at tile i. Returns events [{i, kind}] where kind is removed, floor (dug to the
