@@ -63,7 +63,9 @@ func test_everything_on_the_island_can_be_reached() -> void:
 		for d: Vector2i in [Vector2i.RIGHT, Vector2i.LEFT, Vector2i.DOWN, Vector2i.UP]:
 			reachable = reachable or seen.has(t["pos"] + d)
 		assert_true(reachable, "%s reachable" % t["id"])
-	for k: String in ["tent", "bench", "philius", "tomb", "trader", "collector", "boat"] + Forage.KINDS.keys():
+	for k: String in (
+		["tent", "bench", "philius", "tomb", "trader", "collector", "boat"] + Forage.KINDS.keys()
+	):
 		assert_true(kinds.has(k), "the island has a %s" % k)
 
 
