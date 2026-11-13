@@ -4,7 +4,8 @@ extends RefCounted
 ## "#" jungle and "~" sea block the way; "." grass and "," sand are open; "o" is a fallen
 ## stone. Things you can use: "T" tent (rest), "W" workbench (craft), "P" Professor Philius,
 ## "E" the tomb entrance. Plants to gather: "f" vine fiber, "w" hardwood, "r" resin,
-## "u" wild fruit, "g" glowcap. "@" is where you start.
+## "u" wild fruit, "g" glowcap. "@" is where you start. The supply boat (D42) moors at "B" at
+## the end of the jetty "=", with its trader standing at "V" and any collector at "C".
 
 const LAYOUT: Array[String] = [
 	"##################################################",
@@ -29,10 +30,10 @@ const LAYOUT: Array[String] = [
 	",,,,,,,,,,,,,.........T..W.....P..............,,,,",
 	",,,,,,,,,,,,,,,,,,,,......................,,,,,,,,",
 	",,,,,,,,,,,,,,,,,,,,,,,,,,@,,,,,,,,,,,,,,,,,,,,,,,",
-	",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,",
-	"~~~~~~,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,~~~~~~",
-	"~~~~~~~~~~~~~,,,,,,,,,,,,,,,,,,,,,,,,,,,~~~~~~~~~~",
-	"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+	",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,V,,,C,,,,,,,,,,,,,,",
+	"~~~~~~,,,,,,,,,,,,,,,,,,,,,,,,,,,=,,,,,,,,,,~~~~~~",
+	"~~~~~~~~~~~~~,,,,,,,,,,,,,,,,,,,,=,,,,,,~~~~~~~~~~",
+	"~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~B~~~~~~~~~~~~~~~~",
 ]
 const THINGS := {
 	"T": "tent",
@@ -44,8 +45,11 @@ const THINGS := {
 	"r": "resin",
 	"u": "fruit",
 	"g": "glowcap",
+	"V": "trader",
+	"C": "collector",
+	"B": "boat",
 }
-const OPEN := ".,@"
+const OPEN := ".,@VC="
 
 
 static func size() -> Vector2i:

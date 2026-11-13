@@ -268,3 +268,24 @@ Status: DECIDED by Andrew (2026-11-13). Amends D29.
 Decision: In the tomb the player glides between tiles (0.14 s a step) and can hold a direction to
 keep walking, so it doesn't feel jarring after the island. The rules stay turn-based: each step is
 one tick, and nothing moves while you stand and think.
+
+D42 — The supply boat calls every 1–3 days, with a different trader each time
+Status: DECIDED by Andrew (2026-11-13); traders and prices PROVISIONAL.
+Decision: The supply boat first calls on day 2, then 1–3 days after each call (seeded). It ties
+up at the jetty for the day and leaves the next morning. Each call brings one trader, each wanting
+different things: Mira (everyday pieces), Dace (rare pieces), Tamsin (hearth and hunt), Corvin
+(jade and raw crystal), and Brask the outfitter (crystal, and sells rope anchors, flares and
+rations). A trader pays 1.5× for what they want and 0.6× for the rest. Finds are worth 10 / 25 / 60
+coin by rarity, scaled by condition (pristine 1.0, intact 0.8, worn 0.45, fragment 0.2). Coin is
+the island's money and is saved.
+Why: An intermittent buyer with changing tastes makes selling a timing choice: sell now, or hold a
+find for the trader who wants it.
+
+D43 — Museum collectors want whole collections
+Status: DECIDED by Andrew (2026-11-13); collections and rewards PROVISIONAL.
+Decision: Finds belong to collections (The Jade Court, Hearth and Hunt, The Star Readers). On
+about 60% of calls a museum collector comes too, wanting one collection. Donating to them gives
+renown (+2 if the find was documented, +1 if not) instead of coin. Completing a collection pays a
+one-time grant of 150 coin. Donated finds are gone from the bag. Supersedes nothing; extends D21
+(the supply boat keeps museums).
+Why: Gives a reason to keep a find a trader would buy, and a longer goal than one expedition.

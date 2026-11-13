@@ -53,3 +53,16 @@ func test_version_1_gains_time_of_day_gear_and_regrowth() -> void:
 	assert_eq(migrated["forage"], {})
 	assert_eq(migrated["day"], 6, "kept")
 	assert_eq(migrated["inventory"], {"Crystal": 2}, "kept")
+
+
+func test_version_2_gains_coin_the_boat_and_museums() -> void:
+	var v2 := Migrations.new_game_data(4)
+	v2["version"] = 2
+	v2["day"] = 9
+	v2.erase("coin")
+	v2.erase("boat")
+	v2.erase("museums")
+	var migrated := Migrations.migrate(v2)
+	assert_eq(migrated["coin"], 0)
+	assert_eq(migrated["boat"]["next_day"], 10, "the boat calls the next day")
+	assert_eq(migrated["museums"], {})

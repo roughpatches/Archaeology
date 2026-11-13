@@ -11,6 +11,8 @@ const Calendar := preload("res://core/calendar.gd")
 const Forage := preload("res://core/overworld/forage.gd")
 const Crafting := preload("res://core/overworld/crafting.gd")
 const Philius := preload("res://core/overworld/philius.gd")
+const Boat := preload("res://core/boat.gd")
+const Finds := preload("res://core/finds.gd")
 const DebugOverlay := preload("res://scenes/debug/debug_overlay.gd")
 
 const TILE := 16
@@ -47,7 +49,28 @@ const COLORS := {
 	"fruit": Color("e8504a"),
 	"glowcap": Color("7ff0ff"),
 	"night": Color("060a1a"),
+	"jetty": Color("8a6a44"),
+	"boat": Color("6b4a2a"),
+	"sail": Color("efe6d0"),
+	"trader": Color("e0a040"),
+	"collector": Color("40c0a0"),
 }
+## Map characters with a fixed colour (grass and jungle change with the season).
+const GROUND := {
+	"~": "sea",
+	"B": "sea",
+	",": "sand",
+	"@": "sand",
+	"V": "sand",
+	"C": "sand",
+	"o": "stone",
+	"=": "jetty",
+	"E": "tomb_frame",
+}
+## Keys the outfitter sells gear on (1-9 sell finds, 0 sells crystals).
+const GEAR_KEYS := {KEY_Z: "anchor", KEY_X: "flare", KEY_C: "ration"}
+## At most this many finds are listed for selling or donating.
+const LIST_MAX := 9
 
 const PROMPTS := {
 	"tent": "E: rest half a day (full stamina)",
@@ -77,6 +100,10 @@ func _ready() -> void:
 	_hud.add_theme_font_size_override("font_size", 8)
 	_prompt.position = Vector2(6, 228)
 	_prompt.add_theme_font_size_override("font_size", 8)
+	var panel := StyleBoxFlat.new()
+	panel.bg_color = Color(0, 0, 0, 0.6)
+	panel.set_content_margin_all(3)
+	_prompt.add_theme_stylebox_override("normal", panel)
 	_hud_layer.add_child(_hud)
 	_hud_layer.add_child(_prompt)
 	add_child(_hud_layer)
@@ -111,11 +138,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	match key.keycode:
 		KEY_E:
 			_use()
-		KEY_1, KEY_2, KEY_3:
-			if _near_kind() == "bench":
-				var item: String = Crafting.ORDER[key.keycode - KEY_1]
-				var why := GameState.craft(item)
-				_message = "Made a %s." % Crafting.NAMES[item] if why == "" else why
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
+			_number(key.keycode - KEY_1)
+		KEY_0:
+			if _near_kind() == "trader":
+				_message = GameState.sell_crystals()
+		KEY_Z, KEY_X, KEY_C:
+			if _near_kind() == "trader":
+				_message = GameState.buy_gear(GEAR_KEYS[key.keycode])
 		KEY_F5:
 			_message = "Saved." if SaveService.save_game() == OK else "Save failed."
 		_:
@@ -124,6 +154,54 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_inside_tree():
 		get_viewport().set_input_as_handled()
 		_refresh()
+
+
+## A number key: craft at the bench, sell to the trader, or donate to the collector.
+func _number(n: int) -> void:
+	match _near_kind():
+		"bench":
+			if n < Crafting.ORDER.size():
+				var item: String = Crafting.ORDER[n]
+				var why := GameState.craft(item)
+				_message = "Made a %s." % Crafting.NAMES[item] if why == "" else why
+		"trader":
+			var finds := _listed_finds("")
+			if n < finds.size():
+				_message = GameState.sell_find(finds[n])
+		"collector":
+			var finds := _listed_finds(_collection_here())
+			if n < finds.size():
+				_message = GameState.donate(finds[n])
+
+
+## Indices into the saved finds, at most LIST_MAX, optionally only one collection's.
+func _listed_finds(collection: String) -> Array[int]:
+	var out: Array[int] = []
+	var finds: Array = GameState.data["finds"]
+	for i in finds.size():
+		if collection == "" or Finds.collection_of(finds[i]["id"]) == collection:
+			out.append(i)
+		if out.size() >= LIST_MAX:
+			break
+	return out
+
+
+func _collection_here() -> String:
+	var here := GameState.boat_here()
+	if here.is_empty() or here["collector"] == "":
+		return ""
+	return Boat.COLLECTORS[here["collector"]]["collection"]
+
+
+## Whether a thing is on the island right now (visitors only come with the boat).
+func _present(kind: String) -> bool:
+	var here := GameState.boat_here()
+	match kind:
+		"trader", "boat":
+			return not here.is_empty()
+		"collector":
+			return not here.is_empty() and here["collector"] != ""
+	return true
 
 
 func _use() -> void:
@@ -151,6 +229,8 @@ func _use() -> void:
 			_philius_talks += 1
 		"tomb":
 			_use_tomb()
+		"trader", "collector", "boat":
+			_message = _visitor_greeting(thing["kind"])
 		_:
 			var why := GameState.gather(thing["id"], thing["kind"])
 			_message = ("Gathered %s." % Forage.display_name(thing["kind"]) if why == "" else why)
@@ -202,6 +282,8 @@ func _nearest() -> int:
 	var best := -1
 	var best_d := REACH * TILE
 	for i in _things.size():
+		if not _present(_things[i]["kind"]):
+			continue
 		var d := player_pos.distance_to(_centre_of(_things[i]["pos"]))
 		if d <= best_d:
 			best_d = d
@@ -253,11 +335,13 @@ func _refresh() -> void:
 	if int(inv.get("Crystal", 0)) > 0:
 		parts.append("Crystal %d" % inv["Crystal"])
 	_hud.text = (
-		"%s\nStamina %d/%d   Pack: anchors %d  flares %d  rations %d   Finds %d\n%s"
+		"%s %s\nStamina %d/%d   Coin %d   Pack: anchors %d  flares %d  rations %d   Finds %d\n%s"
 		% [
 			Calendar.describe(GameState.day(), GameState.half()),
+			"The supply boat is in." if not GameState.boat_here().is_empty() else "",
 			GameState.stamina(),
 			int(d["stamina"]["max"]),
+			GameState.coin(),
 			gear["anchor"],
 			gear["flare"],
 			gear["ration"],
@@ -266,6 +350,10 @@ func _refresh() -> void:
 		]
 	)
 	_prompt.text = _prompt_text() + ("\n" + _message if _message != "" else "")
+	# Grow the prompt upward so long lists stay on screen.
+	_prompt.visible = _prompt.text != ""
+	_prompt.reset_size()
+	_prompt.position.y = 266 - _prompt.size.y
 	queue_redraw()
 
 
@@ -277,18 +365,99 @@ func _prompt_text() -> String:
 	var kind: String = thing["kind"]
 	if PROMPTS.has(kind):
 		return PROMPTS[kind]
+	if kind == "trader":
+		return _trader_prompt()
+	if kind == "collector":
+		return _collector_prompt()
 	if kind == "bench":
-		var lines: Array[String] = []
-		for k in Crafting.ORDER.size():
-			var item: String = Crafting.ORDER[k]
-			lines.append("%d %s (%s)" % [k + 1, Crafting.NAMES[item], Crafting.describe(item)])
-		return "\n".join(lines)
+		return _bench_prompt()
+	return _plant_prompt(thing)
+
+
+func _bench_prompt() -> String:
+	var lines: Array[String] = []
+	for k in Crafting.ORDER.size():
+		var item: String = Crafting.ORDER[k]
+		lines.append("%d %s (%s)" % [k + 1, Crafting.NAMES[item], Crafting.describe(item)])
+	return "\n".join(lines)
+
+
+func _plant_prompt(thing: Dictionary) -> String:
+	var kind: String = thing["kind"]
 	var ready_at := int(GameState.data["forage"].get(thing["id"], 0))
 	var why := Forage.why_not(kind, ready_at, GameState.day(), GameState.half())
 	var label := Forage.display_name(kind)
 	if why != "":
 		return "%s: %s" % [label, why]
 	return "E: gather %s (%d stamina)" % [label, Forage.GATHER_COST]
+
+
+func _visitor_greeting(kind: String) -> String:
+	var here := GameState.boat_here()
+	match kind:
+		"trader":
+			return "%s looks over your finds." % Boat.TRADERS[here["trader"]]["name"]
+		"collector":
+			var c: Dictionary = Boat.COLLECTORS[here["collector"]]
+			return "%s collects for %s." % [c["name"], Finds.COLLECTIONS[c["collection"]]["name"]]
+	return "The supply boat, moored for the day. It leaves at dawn."
+
+
+func _trader_prompt() -> String:
+	var trader: String = GameState.boat_here()["trader"]
+	var lines: Array[String] = ["%s buys:" % Boat.TRADERS[trader]["name"]]
+	var finds: Array = GameState.data["finds"]
+	var listed := _listed_finds("")
+	for k in listed.size():
+		var f: Dictionary = finds[listed[k]]
+		var keen := "  (keen!)" if Boat.likes(trader, f) else ""
+		lines.append("%d %s: %d coin%s" % [k + 1, Finds.describe(f), Boat.offer(trader, f), keen])
+	if listed.is_empty():
+		lines.append("(You have no finds to sell.)")
+	var crystals := int(GameState.data["inventory"].get("Crystal", 0))
+	if Boat.crystal_offer(trader) > 0 and crystals > 0:
+		lines.append("0 all %d crystals: %d coin each" % [crystals, Boat.crystal_offer(trader)])
+	if Boat.sells_gear(trader):
+		lines.append(
+			(
+				"Sells: Z anchor %d  X flare %d  C ration %d"
+				% [
+					Boat.GEAR_PRICES["anchor"],
+					Boat.GEAR_PRICES["flare"],
+					Boat.GEAR_PRICES["ration"]
+				]
+			)
+		)
+	return "\n".join(lines)
+
+
+func _collector_prompt() -> String:
+	var collection := _collection_here()
+	var info: Dictionary = Finds.COLLECTIONS[collection]
+	var m: Dictionary = GameState.data["museums"].get(
+		collection, {"donated": [], "renown": 0, "complete": false}
+	)
+	var lines: Array[String] = [
+		(
+			"%s: %d of %d donated, renown %d%s"
+			% [
+				info["name"],
+				m["donated"].size(),
+				info["finds"].size(),
+				m["renown"],
+				"  (complete)" if m["complete"] else ""
+			]
+		)
+	]
+	var finds: Array = GameState.data["finds"]
+	var listed := _listed_finds(collection)
+	for k in listed.size():
+		var f: Dictionary = finds[listed[k]]
+		var have := "  (they have one)" if m["donated"].has(f["id"]) else ""
+		lines.append("%d donate %s%s" % [k + 1, Finds.describe(f), have])
+	if listed.is_empty():
+		lines.append("Wants: %s" % ", ".join(info["finds"]))
+	return "\n".join(lines)
 
 
 func _draw() -> void:
@@ -313,17 +482,10 @@ func _draw() -> void:
 
 
 func _ground(ch: String, season: int) -> Color:
-	match ch:
-		"#":
-			return SEASON_JUNGLE[season]
-		"~":
-			return COLORS["sea"]
-		",", "@":
-			return COLORS["sand"]
-		"o":
-			return COLORS["stone"]
-		"E":
-			return COLORS["tomb_frame"]
+	if ch == "#":
+		return SEASON_JUNGLE[season]
+	if GROUND.has(ch):
+		return COLORS[GROUND[ch]]
 	return SEASON_GRASS[season]
 
 
@@ -347,6 +509,18 @@ func _draw_thing(t: Dictionary, night: bool) -> void:
 			draw_rect(Rect2(o + Vector2(3, 1), Vector2(10, 3)), Color("3a2a1a"))
 		"tomb":
 			draw_rect(Rect2(o + Vector2(3, 2), Vector2(10, 14)), COLORS["tomb"])
+		"boat":
+			if _present("boat"):
+				draw_rect(Rect2(o + Vector2(-8, 6), Vector2(32, 9)), COLORS["boat"])
+				draw_colored_polygon(
+					PackedVector2Array(
+						[o + Vector2(8, -14), o + Vector2(20, 5), o + Vector2(8, 5)]
+					),
+					COLORS["sail"]
+				)
+		"trader", "collector":
+			if _present(kind):
+				draw_circle(centre + Vector2(0, 2), 5, COLORS[kind])
 		_:
 			var ready_at := int(GameState.data["forage"].get(t["id"], 0))
 			var why := Forage.why_not(kind, ready_at, GameState.day(), GameState.half())

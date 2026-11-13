@@ -3,7 +3,7 @@ extends RefCounted
 ##
 ## Any change to the shape bumps CURRENT_VERSION and adds a _from_N step plus a test.
 
-const CURRENT_VERSION := 2
+const CURRENT_VERSION := 3
 
 
 ## Fresh state for a new game on the given world seed.
@@ -16,11 +16,20 @@ static func new_game_data(world_seed: int) -> Dictionary:
 		"stamina": {"current": 100, "max": 100},
 		"gear": starting_gear(),
 		"forage": {},
+		"coin": 0,
+		"boat": new_boat(),
+		"museums": {},
 		"inventory": {},
 		"finds": [],
 		"camp": {"buildings": []},
 		"flags": {},
 	}
+
+
+## The supply boat's state (D42): how many times it has called, when it next calls, and who is
+## here now ({} when it's away).
+static func new_boat() -> Dictionary:
+	return {"calls": 0, "next_day": 2, "here": {}}
 
 
 ## The pack you start with: one rope anchor and two flares, so the first expedition has a way
@@ -44,6 +53,8 @@ static func migrate(raw: Variant) -> Dictionary:
 				out = _from_0(out)
 			1:
 				out = _from_1(out)
+			2:
+				out = _from_2(out)
 		version += 1
 		out["version"] = version
 	return out
@@ -64,4 +75,14 @@ static func _from_1(data: Dictionary) -> Dictionary:
 	data["half"] = 0
 	data["gear"] = starting_gear()
 	data["forage"] = {}
+	return data
+
+
+## Version 2 to 3 (D42, D43): coin, the supply boat, and museum collections.
+static func _from_2(data: Dictionary) -> Dictionary:
+	data["coin"] = 0
+	var boat := new_boat()
+	boat["next_day"] = int(data.get("day", 1)) + 1
+	data["boat"] = boat
+	data["museums"] = {}
 	return data

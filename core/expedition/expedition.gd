@@ -8,6 +8,7 @@ extends RefCounted
 const FloorGen := preload("res://core/expedition/floor_gen.gd")
 const DigSpot := preload("res://core/expedition/dig_spot.gd")
 const SeededRng := preload("res://core/seeded_rng.gd")
+const Finds := preload("res://core/finds.gd")
 
 const FLOORS := 5
 const BAG_SLOTS := 8
@@ -48,12 +49,8 @@ const COLLAPSE_LENGTH := 3
 const STREAM_SHIFT := 6
 
 ## Placeholder finds by rarity. Names are placeholders (D10).
-## The first expedition is a jungle tomb (D33).
-const FINDS := {
-	"common": ["Jade bead", "Clay effigy", "Bone flute"],
-	"uncommon": ["Obsidian blade", "Serpent idol"],
-	"rare": ["Gold-leaf mask piece", "Star-carved lintel stone"],
-}
+## The first expedition is a jungle tomb (D33). Finds and their collections live in core/finds.gd.
+const FINDS: Dictionary = Finds.BY_RARITY
 const RARITIES: Array[String] = ["common", "uncommon", "rare"]
 
 var seed_value: int
