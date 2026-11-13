@@ -268,3 +268,76 @@ Status: DECIDED by Andrew (2026-11-13). Amends D29.
 Decision: In the tomb the player glides between tiles (0.14 s a step) and can hold a direction to
 keep walking, so it doesn't feel jarring after the island. The rules stay turn-based: each step is
 one tick, and nothing moves while you stand and think.
+
+D42 — The supply boat calls every 1–3 days, with a different trader each time
+Status: DECIDED by Andrew (2026-11-13); traders and prices PROVISIONAL.
+Decision: The supply boat first calls on day 2, then 1–3 days after each call (seeded). It ties
+up at the jetty for the day and leaves the next morning. Each call brings one trader, each wanting
+different things: Mira (everyday pieces), Dace (rare pieces), Tamsin (hearth and hunt), Corvin
+(jade and raw crystal), and Brask the outfitter (crystal, and sells rope anchors, flares and
+rations). A trader pays 1.5× for what they want and 0.6× for the rest. Finds are worth 10 / 25 / 60
+coin by rarity, scaled by condition (pristine 1.0, intact 0.8, worn 0.45, fragment 0.2). Coin is
+the island's money and is saved.
+Why: An intermittent buyer with changing tastes makes selling a timing choice: sell now, or hold a
+find for the trader who wants it.
+
+D43 — Museum collectors want whole collections
+Status: DECIDED by Andrew (2026-11-13); collections and rewards PROVISIONAL.
+Decision: Finds belong to collections (The Jade Court, Hearth and Hunt, The Star Readers). On
+about 60% of calls a museum collector comes too, wanting one collection. Donating to them gives
+renown (+2 if the find was documented, +1 if not) instead of coin. Completing a collection pays a
+one-time grant of 150 coin. Donated finds are gone from the bag. Supersedes nothing; extends D21
+(the supply boat keeps museums).
+Why: Gives a reason to keep a find a trader would buy, and a longer goal than one expedition.
+
+D44 — Camp upgrades are bought with coin
+Status: PROVISIONAL (until playtest); prices and effects are starting values.
+Decision: The camp plans board (by the workbench) sells four one-time upgrades: Brighter lamp
+(60 coin, lamp reaches 7 tiles, not 5), Bigger bag (80, carry 12 out of the tomb, not 8), Better
+cot (100, stamina up to 125), Fixed rope to floor 2 (120, a rope out at the top of floor 2 as
+well as floor 1). The fixed rope is the first piece of D30's permanent shortcuts.
+Why: Gives coin a purpose and makes each expedition a little deeper than the last.
+
+D45 — The display shelf and the journal
+Status: PROVISIONAL (until playtest).
+Decision: Finds you keep can go on a display shelf at camp (5 slots; 0 takes the last one
+down). Philius studies them: each find on the shelf makes tunnel hints right 3% more often (65%
+with none, 80% with five). The journal (J) lists every find of each collection, "???" until
+you've brought one home, with where it is now (shelf, donated), your camp upgrades, and
+Philius's notes. Selling, donating and displaying now compete for the same finds.
+Why: The third use for a find from D21 (keep it), tied to the core choice in the tomb: reading
+hints better.
+
+D46 — One story beat: Philius and the star readers
+Status: PROVISIONAL; placeholder writing.
+Decision: After your first expedition Philius asks for anything carved with stars. A Star-chart
+shard (in your finds, on the shelf or donated) moves him on: he wants the Star-carved lintel
+stone from deep in the tomb. Bringing it ends the beat with a hint of the island's mystery and
+50 coin. Each step adds a journal note. Until then he sometimes reminds you what he's after.
+
+D47 — Title screen, pausing, and leaving mid-expedition
+Status: DECIDED (2026-11-13) for the slice.
+Decision: The game opens on a title screen: Continue (when there's a save), New game (asks
+once before replacing a save), Quit. On the island, Esc opens a menu: back, save and go to the
+title, save and quit. In the tomb, Esc pauses: carry on, give up (Philius hauls you out and half
+the bag is lost, as in a collapse), or quit the game. The game saves as you set out, so
+quitting mid-expedition puts you back as you were before you went in. Supersedes the boot
+scene going straight to the island.
+
+D48 — Rendering contract before art
+Status: PROVISIONAL until the first art batch is seen in the game.
+Decision: RENDERING_CONTRACT.md fixes the scale (16 px tiles, 32 × 32 characters, camera 2×,
+integer window scaling), footprints and anchors, draw layers, the palette roles, tile sets,
+animation and density. ART_GUIDE.md lists the assets in three batches. Art starts with batch 1
+(the tomb, the player and Philius) while the slice is playtested.
+Why: The pipeline's phase 5 rule: the rendering contract comes before any art, so props don't
+overlap, block wrongly or look sparse at playtest.
+
+D49 — Placeholder art made by code
+Status: PROVISIONAL; stand-in only.
+Decision: `tools/placeholder_art.py` draws contract-sized placeholder art (tiles, props,
+characters, markers) into `art/placeholder/`, and `--mockup DIR` composes sample screens. It
+follows RENDERING_CONTRACT.md so swapping in real art later changes files, not code. The scenes
+draw it through `scenes/art.gd`, which prefers real art at `art/<name>.png`, then
+`art/placeholder/<name>.png`, then the gray-box shape. Labels, light and the HUD stay drawn by
+code.

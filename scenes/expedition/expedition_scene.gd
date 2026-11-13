@@ -3,12 +3,14 @@ extends Node2D
 ##
 ## Explore: arrows/WASD move, Q survey, F flare, E use (rope, stairs, dig spot). Tunnels
 ## branch; each ends in a one-way drop, and each mouth shows a hint (checked by a survey).
-## Dig: 1-4 pick tool, click a tile, L lift, Esc or E back out.
+## Dig: 1-4 pick tool, click a tile, L lift, Esc or E back out. Esc while exploring pauses:
+## give up (Philius hauls you out, half the bag lost) or quit the game.
 
 const Expedition := preload("res://core/expedition/expedition.gd")
 const FloorGen := preload("res://core/expedition/floor_gen.gd")
 const DigView := preload("res://scenes/expedition/dig_view.gd")
 const DebugOverlay := preload("res://scenes/debug/debug_overlay.gd")
+const Art := preload("res://scenes/art.gd")
 
 const TILE := 16
 ## Jungle tomb palette (D33). Gray-box: flat colours, no art.
@@ -36,6 +38,22 @@ const COLORS := {
 	"spring": Color("7fd4ff"),
 	"hint": Color("d8cfc0"),
 	"hint_checked": Color("ffd84a"),
+}
+## Art for each tile kind (D49); walls with open ground below show their face instead.
+const TILE_ART := {
+	FloorGen.Tile.WALL: "tomb/wall",
+	FloorGen.Tile.FLOOR: "tomb/floor",
+	FloorGen.Tile.PILLAR: "tomb/pillar",
+	FloorGen.Tile.LEDGE: "tomb/ledge",
+	FloorGen.Tile.RUBBLE: "tomb/rubble",
+}
+const TILE_COLOR := {
+	FloorGen.Tile.WALL: "wall",
+	FloorGen.Tile.FLOOR: "floor",
+	FloorGen.Tile.PILLAR: "pillar",
+	FloorGen.Tile.LEDGE: "ledge",
+	FloorGen.Tile.WATER: "water",
+	FloorGen.Tile.RUBBLE: "rubble",
 }
 ## The camera is close in, so a chamber is bigger than the screen (D34).
 const ZOOM := 2.0
@@ -97,6 +115,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mode == "dig":
 		return  # DigView handles its own keys.
+	if mode == "paused" or key.keycode == KEY_ESCAPE:
+		if not key.echo:
+			_paused_key(key.keycode)
+		get_viewport().set_input_as_handled()
+		return
+	_explore_key(key)
+
+
+## Walking and the explore keys.
+func _explore_key(key: InputEventKey) -> void:
 	var dir := Vector2i.ZERO
 	match key.keycode:
 		KEY_LEFT, KEY_A:
@@ -132,6 +160,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	_after_action()
+
+
+## Esc pauses; while paused, Esc carries on, G gives up, Q quits the game.
+func _paused_key(keycode: int) -> void:
+	if mode != "paused":
+		mode = "paused"
+		_refresh()
+		return
+	match keycode:
+		KEY_ESCAPE:
+			mode = "explore"
+		KEY_G:
+			run.give_up()
+			mode = "result"
+		KEY_Q:
+			# The save was made as you set out, so the trip never happened.
+			get_tree().quit()
+	_refresh()
 
 
 ## Turn-based rules (D29), smooth look (D41): each step is one tick, and the player glides to
@@ -230,7 +276,7 @@ func _refresh() -> void:
 					Expedition.FLOORS,
 					run.stamina,
 					run.bag.size(),
-					Expedition.BAG_SLOTS,
+					run.bag_slots,
 					run.flares,
 					run.anchors_left,
 					run.rations,
@@ -241,6 +287,13 @@ func _refresh() -> void:
 	if mode == "result":
 		lines.append("")
 		lines.append(_result_text())
+	elif mode == "paused":
+		lines.append("")
+		lines.append("PAUSED   Esc: carry on")
+		lines.append("G: give up. Philius hauls you out; half the bag is lost.")
+		lines.append(
+			"Q: quit the game. The trip never happened: you're back as you were before setting out."
+		)
 	else:
 		var hint := (
 			"WASD move  Q survey (%d)  F flare  T anchor (%d)  R ration  E use"
@@ -286,37 +339,10 @@ func _draw() -> void:
 	var view := get_viewport_rect().size / ZOOM
 	var origin := _camera.position - view / 2.0
 	draw_rect(Rect2(origin, view), COLORS["unseen"])
-	var tiles: PackedByteArray = run.floor_data["tiles"]
 	var size: Vector2i = run.floor_data["size"]
 	for p: Vector2i in run.lit:
-		if p.x < 0 or p.y < 0 or p.x >= size.x or p.y >= size.y:
-			continue
-		var t: int = tiles[p.y * size.x + p.x]
-		var c: Color = COLORS["wall"]
-		match t:
-			FloorGen.Tile.FLOOR:
-				c = COLORS["floor"]
-			FloorGen.Tile.LEDGE:
-				c = COLORS["ledge"]
-			FloorGen.Tile.PILLAR:
-				c = COLORS["pillar"]
-			FloorGen.Tile.WATER:
-				c = COLORS["water"]
-			FloorGen.Tile.RUBBLE:
-				c = COLORS["rubble"]
-		# The lamp fades toward the edge of its reach.
-		c = c.darkened(0.12 * maxi(0, _dist(p) - 2))
-		var rect := Rect2(Vector2(p * TILE), Vector2(TILE, TILE))
-		draw_rect(rect, c)
-		if t == FloorGen.Tile.WALL and _hash(p) % 4 == 0:
-			var o := Vector2(p * TILE)
-			draw_line(o + Vector2(3, 0), o + Vector2(5, TILE), COLORS["root"], 1.5)
-		elif t == FloorGen.Tile.RUBBLE:
-			draw_circle(rect.get_center() + Vector2(-3, 2), 3, c.lightened(0.2))
-			draw_circle(rect.get_center() + Vector2(3, -2), 2.5, c.lightened(0.15))
-		elif t == FloorGen.Tile.WATER and (_hash(p) + run.ticks) % 3 == 0:
-			var o := Vector2(p * TILE)
-			draw_line(o + Vector2(4, 6), o + Vector2(10, 6), COLORS["water"].lightened(0.3), 1.0)
+		if p.x >= 0 and p.y >= 0 and p.x < size.x and p.y < size.y:
+			_draw_tile(p)
 	if not run.rumble.is_empty():
 		for p: Vector2i in run.rumble["tiles"]:
 			if run.lit.has(p):
@@ -326,54 +352,124 @@ func _draw() -> void:
 					draw_circle(
 						o + Vector2(3 + 5 * k, 3 + 4 * ((k + run.ticks) % 3)), 1, Color.WHEAT
 					)
-	if run.depth == 1:
-		_mark(run.floor_data["entry"], COLORS["rope"], "rope")
-	for an in run.anchors:
-		_mark(an, COLORS["rope"], "anchor")
-	for c: Dictionary in run.floor_data["chambers"]:
-		if c["shaft"] != FloorGen.NO_SHAFT:
-			_mark(c["shaft"], COLORS["shaft"], "daylight")
-	for e: Vector2i in run.floor_data["exits"]:
-		if run.depth >= Expedition.FLOORS:
-			_mark(e, COLORS["rope"], "rope")
-		else:
-			_mark(e, COLORS["stairs"], "down")
-	for t: Dictionary in run.floor_data["tunnels"]:
-		if run.lit.has(t["ledge"]):
-			_chevron(t["ledge"])
-	for sp in run.springs:
-		_mark(sp, COLORS["spring"], "")
-	for h in run.tunnel_hints():
-		if run.lit.has(h["pos"]):
-			_hint_label(h)
+	_draw_markers()
 	for s in run.spots:
 		if not s["noticed"]:
 			continue
+		var state := "done"
 		var col: Color = COLORS["spot_done"]
 		if not s["dig"].lifted:
+			state = "mapped" if s["dig"].surveyed else "sign"
 			col = COLORS["spot_mapped"] if s["dig"].surveyed else COLORS["spot"]
-		_mark(s["pos"], col, "dig")
+		_mark(s["pos"], col, "dig", "tomb/dig_spot_" + state)
 	for n in run.nodes:
-		_mark(n, COLORS["node"], "")
+		_mark(n, COLORS["node"], "", "tomb/crystal")
+	_draw_actors()
+	_draw_lamp_fade()
+	for h in run.tunnel_hints():
+		if run.lit.has(h["pos"]):
+			_hint_label(h)
+
+
+## One lit floor tile: art if there is some (D49), else the gray-box colour.
+func _draw_tile(p: Vector2i) -> void:
+	var t := FloorGen.tile_at(run.floor_data, p)
+	var rect := Rect2(Vector2(p * TILE), Vector2(TILE, TILE))
+	var art: String = TILE_ART.get(t, "")
+	if (
+		t == FloorGen.Tile.WALL
+		and FloorGen.open(FloorGen.tile_at(run.floor_data, p + Vector2i.DOWN))
+	):
+		art = "tomb/wall_face"
+	elif t == FloorGen.Tile.WATER:
+		art = "tomb/stream_%d" % ((_hash(p) + run.ticks) % 4)
+	var tex := Art.tex(art)
+	if tex != null:
+		draw_texture(tex, rect.position)
+		if t == FloorGen.Tile.LEDGE:
+			_chevron(p)
+		return
+	var c: Color = COLORS[TILE_COLOR.get(t, "wall")]
+	draw_rect(rect, c)
+	if t == FloorGen.Tile.WALL and _hash(p) % 4 == 0:
+		var o := Vector2(p * TILE)
+		draw_line(o + Vector2(3, 0), o + Vector2(5, TILE), COLORS["root"], 1.5)
+	elif t == FloorGen.Tile.RUBBLE:
+		draw_circle(rect.get_center() + Vector2(-3, 2), 3, c.lightened(0.2))
+		draw_circle(rect.get_center() + Vector2(3, -2), 2.5, c.lightened(0.15))
+	elif t == FloorGen.Tile.LEDGE:
+		_chevron(p)
+
+
+## Ways out, the way down and springs.
+func _draw_markers() -> void:
+	if run.depth <= run.rope_floors:
+		_mark(run.floor_data["entry"], COLORS["rope"], "rope", "tomb/rope")
+	for an in run.anchors:
+		_mark(an, COLORS["rope"], "anchor", "tomb/anchor")
+	for c: Dictionary in run.floor_data["chambers"]:
+		if c["shaft"] != FloorGen.NO_SHAFT:
+			_mark(c["shaft"], COLORS["shaft"], "daylight", "tomb/shaft")
+	for e: Vector2i in run.floor_data["exits"]:
+		if run.depth >= Expedition.FLOORS:
+			_mark(e, COLORS["rope"], "rope", "tomb/rope")
+		else:
+			_mark(e, COLORS["stairs"], "down", "tomb/stairs")
+	for sp in run.springs:
+		_mark(sp, COLORS["spring"], "", "tomb/spring")
+
+
+## Creatures and the player, sorted by the y of their feet (contract section 3).
+func _draw_actors() -> void:
+	var actors: Array = []
 	for cr in run.creatures:
 		if run.lit.has(cr["pos"]):
-			var col: Color = COLORS["creature"]
-			if cr["flee"] > 0:
-				col = COLORS["creature_flee"]
-			elif cr["stun"] > 0:
-				col = COLORS["creature_stun"]
-			draw_circle(Vector2(cr["pos"] * TILE) + Vector2(TILE, TILE) / 2.0, TILE * 0.4, col)
-	draw_rect(
-		Rect2(_shown - Vector2(TILE - 6, TILE - 6) / 2.0, Vector2(TILE - 6, TILE - 6)),
-		COLORS["player"]
-	)
+			actors.append([_tile_centre(cr["pos"]).y, cr])
+	actors.append([_shown.y, {}])
+	actors.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	for item: Array in actors:
+		var cr: Dictionary = item[1]
+		if cr.is_empty():
+			if not Art.draw_feet(self, "characters/player", _shown + Vector2(0, 7)):
+				draw_rect(
+					Rect2(_shown - Vector2(TILE - 6, TILE - 6) / 2.0, Vector2(TILE - 6, TILE - 6)),
+					COLORS["player"]
+				)
+			continue
+		var state := "normal"
+		var col: Color = COLORS["creature"]
+		if cr["flee"] > 0:
+			state = "flee"
+			col = COLORS["creature_flee"]
+		elif cr["stun"] > 0:
+			state = "stunned"
+			col = COLORS["creature_stun"]
+		var centre := _tile_centre(cr["pos"])
+		if not Art.draw_feet(self, "characters/creature_" + state, centre + Vector2(0, 7)):
+			draw_circle(centre, TILE * 0.4, col)
 
 
-func _mark(p: Vector2i, col: Color, label: String) -> void:
+## The lamp fades toward the edge of its reach, drawn over the art (contract section 3).
+func _draw_lamp_fade() -> void:
+	for p: Vector2i in run.lit:
+		var k := maxi(0, _dist(p) - 2)
+		if k > 0:
+			draw_rect(
+				Rect2(Vector2(p * TILE), Vector2(TILE, TILE)), Color(0, 0, 0, minf(0.12 * k, 0.8))
+			)
+
+
+## A marked tile: its art if there is some, else a coloured frame; and its label (labels stay
+## drawn by code, contract section 9).
+func _mark(p: Vector2i, col: Color, label: String, art: String = "") -> void:
 	if not run.lit.has(p):
 		return
-	var rect := Rect2(Vector2(p * TILE) + Vector2(1, 1), Vector2(TILE - 2, TILE - 2))
-	draw_rect(rect, col, false, 2.0)
+	var tex := Art.tex(art) if art != "" else null
+	if tex != null:
+		draw_texture(tex, Vector2(p * TILE))
+	else:
+		var rect := Rect2(Vector2(p * TILE) + Vector2(1, 1), Vector2(TILE - 2, TILE - 2))
+		draw_rect(rect, col, false, 2.0)
 	if label != "":
 		draw_string(
 			ThemeDB.fallback_font,

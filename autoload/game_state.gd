@@ -10,6 +10,10 @@ const Migrations := preload("res://core/save_migrations.gd")
 const Calendar := preload("res://core/calendar.gd")
 const Forage := preload("res://core/overworld/forage.gd")
 const Crafting := preload("res://core/overworld/crafting.gd")
+const Boat := preload("res://core/boat.gd")
+const Finds := preload("res://core/finds.gd")
+const Camp := preload("res://core/overworld/camp.gd")
+const Story := preload("res://core/overworld/story.gd")
 
 var data: Dictionary = {}
 ## The gear packed for the expedition under way. Not saved: it lives only for one trip.
@@ -51,11 +55,109 @@ func stamina() -> int:
 	return int(data["stamina"]["current"])
 
 
-## Moves time on by half a day (D35).
+## Moves time on by half a day (D35). Each morning the boat may leave or call (D42).
 func pass_half() -> void:
 	var nxt := Calendar.next(day(), half())
 	data["day"] = nxt[0]
 	data["half"] = nxt[1]
+	if half() == 0:
+		_boat_morning()
+
+
+func _boat_morning() -> void:
+	var boat: Dictionary = data["boat"]
+	var here: Dictionary = boat["here"]
+	if not here.is_empty() and int(here["day"]) < day():
+		boat["here"] = {}
+	if day() >= int(boat["next_day"]):
+		boat["calls"] = int(boat["calls"]) + 1
+		var who := Boat.visitors(int(data["world_seed"]), boat["calls"])
+		who["day"] = day()
+		boat["here"] = who
+		boat["next_day"] = day() + Boat.gap(int(data["world_seed"]), boat["calls"])
+
+
+## Who the boat brought ({trader, collector, day}), or {} when it's away.
+func boat_here() -> Dictionary:
+	return data["boat"]["here"]
+
+
+func coin() -> int:
+	return int(data.get("coin", 0))
+
+
+## Sells finds[i] to the trader on the boat. Returns what happened, in words.
+func sell_find(i: int) -> String:
+	var here := boat_here()
+	var finds: Array = data["finds"]
+	if here.is_empty() or i < 0 or i >= finds.size():
+		return "Nothing to sell."
+	var price := Boat.offer(here["trader"], finds[i])
+	var find: Dictionary = finds[i]
+	finds.remove_at(i)
+	data["coin"] = coin() + price
+	changed.emit()
+	return "Sold the %s for %d coin." % [find["id"], price]
+
+
+## Sells every crystal to a trader who buys them.
+func sell_crystals() -> String:
+	var here := boat_here()
+	var inv: Dictionary = data["inventory"]
+	var n := int(inv.get("Crystal", 0))
+	var price := Boat.crystal_offer(here["trader"]) if not here.is_empty() else 0
+	if n == 0 or price == 0:
+		return "No crystals to sell here."
+	inv["Crystal"] = 0
+	data["coin"] = coin() + n * price
+	changed.emit()
+	return "Sold %d crystal%s for %d coin." % [n, "" if n == 1 else "s", n * price]
+
+
+## Buys a piece of gear from the outfitter.
+func buy_gear(item: String) -> String:
+	var here := boat_here()
+	if here.is_empty() or not Boat.sells_gear(here["trader"]):
+		return "Nobody here sells gear."
+	var gear: Dictionary = data["gear"]
+	var price: int = Boat.GEAR_PRICES[item]
+	if int(gear.get(item, 0)) >= Crafting.PACK_CAP:
+		return "You can't carry more than %d." % Crafting.PACK_CAP
+	if coin() < price:
+		return "That's %d coin; you have %d." % [price, coin()]
+	data["coin"] = coin() - price
+	gear[item] = int(gear.get(item, 0)) + 1
+	changed.emit()
+	return "Bought a %s." % Crafting.NAMES[item]
+
+
+## Gives finds[i] to the collector on the boat for their museum's collection (D43).
+func donate(i: int) -> String:
+	var here := boat_here()
+	var finds: Array = data["finds"]
+	if here.is_empty() or here["collector"] == "" or i < 0 or i >= finds.size():
+		return "Nobody here to donate to."
+	var collection: String = Boat.COLLECTORS[here["collector"]]["collection"]
+	var find: Dictionary = finds[i]
+	if Finds.collection_of(find["id"]) != collection:
+		return "That isn't part of %s." % Finds.COLLECTIONS[collection]["name"]
+	var museums: Dictionary = data["museums"]
+	if not museums.has(collection):
+		museums[collection] = {"donated": [], "renown": 0, "complete": false}
+	var m: Dictionary = museums[collection]
+	if (m["donated"] as Array).has(find["id"]):
+		return "They already have a %s." % find["id"]
+	finds.remove_at(i)
+	m["donated"].append(find["id"])
+	m["renown"] = int(m["renown"]) + (2 if find.get("context") == "documented" else 1)
+	var out := "Donated the %s to %s." % [find["id"], Finds.COLLECTIONS[collection]["name"]]
+	var all_finds: Array = Finds.COLLECTIONS[collection]["finds"]
+	if not m["complete"] and all_finds.all(func(f: String) -> bool: return m["donated"].has(f)):
+		m["complete"] = true
+		data["coin"] = coin() + Boat.COLLECTION_REWARD
+		out += " The collection is complete! A grant of %d coin." % Boat.COLLECTION_REWARD
+	changed.emit()
+	return out
 
 
 ## A full rest at the tent: half a day passes and stamina is full again (D35).
@@ -100,9 +202,14 @@ func pack_for_expedition() -> Dictionary:
 	return expedition_pack
 
 
-## What the island's time and season do to the tomb (D36).
+## What the island's time and season (D36), camp upgrades (D44) and the shelf (D45) do to the
+## tomb.
 func expedition_conditions() -> Dictionary:
-	return {"night": Calendar.is_night(half()), "rains": Calendar.season(day()) == 1}
+	var out := Camp.expedition_boosts(built(), shelf().size())
+	out["night"] = Calendar.is_night(half())
+	out["rains"] = Calendar.season(day()) == 1
+	out["max_stamina"] = int(data["stamina"]["max"])
+	return out
 
 
 ## Brings an expedition's results home: finds go to the finds list, materials to the
@@ -115,6 +222,8 @@ func apply_expedition(bag: Array, stamina_left: int, pack_left: Dictionary = {})
 	pass_half()
 	var finds: Array = data["finds"]
 	var inventory: Dictionary = data["inventory"]
+	var flags: Dictionary = data["flags"]
+	flags["expeditions"] = int(flags.get("expeditions", 0)) + 1
 	for item: Dictionary in bag:
 		if item.get("kind") == "material":
 			inventory[item["id"]] = int(inventory.get(item["id"], 0)) + 1
@@ -122,6 +231,79 @@ func apply_expedition(bag: Array, stamina_left: int, pack_left: Dictionary = {})
 			var find := item.duplicate()
 			find.erase("kind")
 			finds.append(find)
+			data["journal"]["seen"][find["id"]] = true
 	var stamina: Dictionary = data["stamina"]
 	stamina["current"] = clampi(stamina_left, 0, int(stamina["max"]))
 	changed.emit()
+
+
+# ---- camp: upgrades, the display shelf, the journal, Philius's story ---------------------
+
+
+func built() -> Array:
+	return data["camp"]["buildings"]
+
+
+## Buys a camp upgrade (D44). Returns "" or why not.
+func build(id: String) -> String:
+	var why := Camp.why_not(id, built(), coin())
+	if why != "":
+		return why
+	data["coin"] = coin() - int(Camp.UPGRADES[id]["cost"])
+	built().append(id)
+	if id == "cot":
+		var st: Dictionary = data["stamina"]
+		st["max"] = Camp.max_stamina(built())
+	changed.emit()
+	return ""
+
+
+func shelf() -> Array:
+	return data["shelf"]
+
+
+## Puts finds[i] on the display shelf (D45). Returns what happened, in words.
+func display(i: int) -> String:
+	var finds: Array = data["finds"]
+	if i < 0 or i >= finds.size():
+		return "Nothing to put out."
+	if shelf().size() >= Camp.SHELF_SLOTS:
+		return "The shelf is full. Press 0 to take one down."
+	var find: Dictionary = finds[i]
+	finds.remove_at(i)
+	shelf().append(find)
+	changed.emit()
+	return "You set the %s on the shelf. Philius peers at it." % find["id"]
+
+
+## Takes the last find off the shelf and back into your finds.
+func take_down() -> String:
+	if shelf().is_empty():
+		return "The shelf is empty."
+	var find: Dictionary = shelf().pop_back()
+	data["finds"].append(find)
+	changed.emit()
+	return "You take down the %s." % find["id"]
+
+
+func story_stage() -> int:
+	return int(data["flags"].get("story", 0))
+
+
+## Talks to Philius about the story (D46). Returns his lines if the story moves on (and adds
+## the journal note and any reward), else [].
+func story_talk() -> Array:
+	var have: Array = []
+	for f: Dictionary in data["finds"] + shelf():
+		have.append(f["id"])
+	for c: String in data["museums"]:
+		have.append_array(data["museums"][c]["donated"])
+	var flags: Dictionary = data["flags"]
+	var beat := Story.next(story_stage(), int(flags.get("expeditions", 0)), have)
+	if beat.is_empty():
+		return []
+	flags["story"] = beat["stage"]
+	data["journal"]["notes"].append(beat["note"])
+	data["coin"] = coin() + int(beat["reward"])
+	changed.emit()
+	return beat["lines"]
