@@ -75,9 +75,11 @@ const LAST_SLOTS := [[1], [0, 2], [0, 1, 2]]
 ##     draft: bool (a shaft lies beyond, and you can feel it)},
 ##   entry: Vector2i (the landing, chamber 0's centre), exits: Array[Vector2i] (way down),
 ## }.
-## conditions: {night: bool, rains: bool} from the island's time and season.
+## conditions: {night: bool, rains: bool} from the island's time and season, and
+## optionally hint_accuracy (the display shelf, D45).
 static func generate(seed_value: int, depth: int = 1, conditions: Dictionary = {}) -> Dictionary:
 	var night := bool(conditions.get("night", false))
+	var hint_accuracy := float(conditions.get("hint_accuracy", HINT_ACCURACY))
 	var stream_chance := RAINS_STREAM_CHANCE if conditions.get("rains", false) else STREAM_CHANCE
 	var rng := SeededRng.new(seed_value)
 	var tiles := PackedByteArray()
@@ -112,7 +114,7 @@ static func generate(seed_value: int, depth: int = 1, conditions: Dictionary = {
 			tunnel["from"] = link[0]
 			tunnel["to"] = link[1]
 			var kind: String = chambers[link[1]]["kind"]
-			if not rng.chance(HINT_ACCURACY):
+			if not rng.chance(hint_accuracy):
 				# A wrong hint is still something this floor could hold.
 				var weights := kind_weights(depth, night)
 				var others := KINDS.filter(

@@ -5,7 +5,8 @@ extends RefCounted
 ## stone. Things you can use: "T" tent (rest), "W" workbench (craft), "P" Professor Philius,
 ## "E" the tomb entrance. Plants to gather: "f" vine fiber, "w" hardwood, "r" resin,
 ## "u" wild fruit, "g" glowcap. "@" is where you start. The supply boat (D42) moors at "B" at
-## the end of the jetty "=", with its trader standing at "V" and any collector at "C".
+## the end of the jetty "=", with its trader standing at "V" and any collector at "C". At
+## camp, "D" is the display shelf and "K" the camp plans (upgrades, D44 and D45).
 
 const LAYOUT: Array[String] = [
 	"##################################################",
@@ -27,7 +28,7 @@ const LAYOUT: Array[String] = [
 	"#############..g.................w.......f.......#",
 	"##############......................r...........##",
 	"##o#######........................................",
-	",,,,,,,,,,,,,.........T..W.....P..............,,,,",
+	",,,,,,,,,,,,,......D..T..W..K..P..............,,,,",
 	",,,,,,,,,,,,,,,,,,,,......................,,,,,,,,",
 	",,,,,,,,,,,,,,,,,,,,,,,,,,@,,,,,,,,,,,,,,,,,,,,,,,",
 	",,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,V,,,C,,,,,,,,,,,,,,",
@@ -48,6 +49,8 @@ const THINGS := {
 	"V": "trader",
 	"C": "collector",
 	"B": "boat",
+	"D": "shelf",
+	"K": "plans",
 }
 const OPEN := ".,@VC="
 

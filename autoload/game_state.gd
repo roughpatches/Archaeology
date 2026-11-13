@@ -12,6 +12,8 @@ const Forage := preload("res://core/overworld/forage.gd")
 const Crafting := preload("res://core/overworld/crafting.gd")
 const Boat := preload("res://core/boat.gd")
 const Finds := preload("res://core/finds.gd")
+const Camp := preload("res://core/overworld/camp.gd")
+const Story := preload("res://core/overworld/story.gd")
 
 var data: Dictionary = {}
 ## The gear packed for the expedition under way. Not saved: it lives only for one trip.
@@ -200,9 +202,14 @@ func pack_for_expedition() -> Dictionary:
 	return expedition_pack
 
 
-## What the island's time and season do to the tomb (D36).
+## What the island's time and season (D36), camp upgrades (D44) and the shelf (D45) do to the
+## tomb.
 func expedition_conditions() -> Dictionary:
-	return {"night": Calendar.is_night(half()), "rains": Calendar.season(day()) == 1}
+	var out := Camp.expedition_boosts(built(), shelf().size())
+	out["night"] = Calendar.is_night(half())
+	out["rains"] = Calendar.season(day()) == 1
+	out["max_stamina"] = int(data["stamina"]["max"])
+	return out
 
 
 ## Brings an expedition's results home: finds go to the finds list, materials to the
@@ -215,6 +222,8 @@ func apply_expedition(bag: Array, stamina_left: int, pack_left: Dictionary = {})
 	pass_half()
 	var finds: Array = data["finds"]
 	var inventory: Dictionary = data["inventory"]
+	var flags: Dictionary = data["flags"]
+	flags["expeditions"] = int(flags.get("expeditions", 0)) + 1
 	for item: Dictionary in bag:
 		if item.get("kind") == "material":
 			inventory[item["id"]] = int(inventory.get(item["id"], 0)) + 1
@@ -222,6 +231,79 @@ func apply_expedition(bag: Array, stamina_left: int, pack_left: Dictionary = {})
 			var find := item.duplicate()
 			find.erase("kind")
 			finds.append(find)
+			data["journal"]["seen"][find["id"]] = true
 	var stamina: Dictionary = data["stamina"]
 	stamina["current"] = clampi(stamina_left, 0, int(stamina["max"]))
 	changed.emit()
+
+
+# ---- camp: upgrades, the display shelf, the journal, Philius's story ---------------------
+
+
+func built() -> Array:
+	return data["camp"]["buildings"]
+
+
+## Buys a camp upgrade (D44). Returns "" or why not.
+func build(id: String) -> String:
+	var why := Camp.why_not(id, built(), coin())
+	if why != "":
+		return why
+	data["coin"] = coin() - int(Camp.UPGRADES[id]["cost"])
+	built().append(id)
+	if id == "cot":
+		var st: Dictionary = data["stamina"]
+		st["max"] = Camp.max_stamina(built())
+	changed.emit()
+	return ""
+
+
+func shelf() -> Array:
+	return data["shelf"]
+
+
+## Puts finds[i] on the display shelf (D45). Returns what happened, in words.
+func display(i: int) -> String:
+	var finds: Array = data["finds"]
+	if i < 0 or i >= finds.size():
+		return "Nothing to put out."
+	if shelf().size() >= Camp.SHELF_SLOTS:
+		return "The shelf is full. Press 0 to take one down."
+	var find: Dictionary = finds[i]
+	finds.remove_at(i)
+	shelf().append(find)
+	changed.emit()
+	return "You set the %s on the shelf. Philius peers at it." % find["id"]
+
+
+## Takes the last find off the shelf and back into your finds.
+func take_down() -> String:
+	if shelf().is_empty():
+		return "The shelf is empty."
+	var find: Dictionary = shelf().pop_back()
+	data["finds"].append(find)
+	changed.emit()
+	return "You take down the %s." % find["id"]
+
+
+func story_stage() -> int:
+	return int(data["flags"].get("story", 0))
+
+
+## Talks to Philius about the story (D46). Returns his lines if the story moves on (and adds
+## the journal note and any reward), else [].
+func story_talk() -> Array:
+	var have: Array = []
+	for f: Dictionary in data["finds"] + shelf():
+		have.append(f["id"])
+	for c: String in data["museums"]:
+		have.append_array(data["museums"][c]["donated"])
+	var flags: Dictionary = data["flags"]
+	var beat := Story.next(story_stage(), int(flags.get("expeditions", 0)), have)
+	if beat.is_empty():
+		return []
+	flags["story"] = beat["stage"]
+	data["journal"]["notes"].append(beat["note"])
+	data["coin"] = coin() + int(beat["reward"])
+	changed.emit()
+	return beat["lines"]

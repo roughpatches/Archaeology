@@ -289,3 +289,37 @@ renown (+2 if the find was documented, +1 if not) instead of coin. Completing a 
 one-time grant of 150 coin. Donated finds are gone from the bag. Supersedes nothing; extends D21
 (the supply boat keeps museums).
 Why: Gives a reason to keep a find a trader would buy, and a longer goal than one expedition.
+
+D44 — Camp upgrades are bought with coin
+Status: PROVISIONAL (until playtest); prices and effects are starting values.
+Decision: The camp plans board (by the workbench) sells four one-time upgrades: Brighter lamp
+(60 coin, lamp reaches 7 tiles, not 5), Bigger bag (80, carry 12 out of the tomb, not 8), Better
+cot (100, stamina up to 125), Fixed rope to floor 2 (120, a rope out at the top of floor 2 as
+well as floor 1). The fixed rope is the first piece of D30's permanent shortcuts.
+Why: Gives coin a purpose and makes each expedition a little deeper than the last.
+
+D45 — The display shelf and the journal
+Status: PROVISIONAL (until playtest).
+Decision: Finds you keep can go on a display shelf at camp (5 slots; 0 takes the last one
+down). Philius studies them: each find on the shelf makes tunnel hints right 3% more often (65%
+with none, 80% with five). The journal (J) lists every find of each collection, "???" until
+you've brought one home, with where it is now (shelf, donated), your camp upgrades, and
+Philius's notes. Selling, donating and displaying now compete for the same finds.
+Why: The third use for a find from D21 (keep it), tied to the core choice in the tomb: reading
+hints better.
+
+D46 — One story beat: Philius and the star readers
+Status: PROVISIONAL; placeholder writing.
+Decision: After your first expedition Philius asks for anything carved with stars. A Star-chart
+shard (in your finds, on the shelf or donated) moves him on: he wants the Star-carved lintel
+stone from deep in the tomb. Bringing it ends the beat with a hint of the island's mystery and
+50 coin. Each step adds a journal note. Until then he sometimes reminds you what he's after.
+
+D47 — Title screen, pausing, and leaving mid-expedition
+Status: DECIDED (2026-11-13) for the slice.
+Decision: The game opens on a title screen: Continue (when there's a save), New game (asks
+once before replacing a save), Quit. On the island, Esc opens a menu: back, save and go to the
+title, save and quit. In the tomb, Esc pauses: carry on, give up (Philius hauls you out and half
+the bag is lost, as in a collapse), or quit the game. The game saves as you set out, so
+quitting mid-expedition puts you back as you were before you went in. Supersedes the boot
+scene going straight to the island.

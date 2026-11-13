@@ -3,7 +3,8 @@ extends Node2D
 ##
 ## Explore: arrows/WASD move, Q survey, F flare, E use (rope, stairs, dig spot). Tunnels
 ## branch; each ends in a one-way drop, and each mouth shows a hint (checked by a survey).
-## Dig: 1-4 pick tool, click a tile, L lift, Esc or E back out.
+## Dig: 1-4 pick tool, click a tile, L lift, Esc or E back out. Esc while exploring pauses:
+## give up (Philius hauls you out, half the bag lost) or quit the game.
 
 const Expedition := preload("res://core/expedition/expedition.gd")
 const FloorGen := preload("res://core/expedition/floor_gen.gd")
@@ -97,6 +98,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mode == "dig":
 		return  # DigView handles its own keys.
+	if mode == "paused" or key.keycode == KEY_ESCAPE:
+		if not key.echo:
+			_paused_key(key.keycode)
+		get_viewport().set_input_as_handled()
+		return
+	_explore_key(key)
+
+
+## Walking and the explore keys.
+func _explore_key(key: InputEventKey) -> void:
 	var dir := Vector2i.ZERO
 	match key.keycode:
 		KEY_LEFT, KEY_A:
@@ -132,6 +143,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	_after_action()
+
+
+## Esc pauses; while paused, Esc carries on, G gives up, Q quits the game.
+func _paused_key(keycode: int) -> void:
+	if mode != "paused":
+		mode = "paused"
+		_refresh()
+		return
+	match keycode:
+		KEY_ESCAPE:
+			mode = "explore"
+		KEY_G:
+			run.give_up()
+			mode = "result"
+		KEY_Q:
+			# The save was made as you set out, so the trip never happened.
+			get_tree().quit()
+	_refresh()
 
 
 ## Turn-based rules (D29), smooth look (D41): each step is one tick, and the player glides to
@@ -230,7 +259,7 @@ func _refresh() -> void:
 					Expedition.FLOORS,
 					run.stamina,
 					run.bag.size(),
-					Expedition.BAG_SLOTS,
+					run.bag_slots,
 					run.flares,
 					run.anchors_left,
 					run.rations,
@@ -241,6 +270,13 @@ func _refresh() -> void:
 	if mode == "result":
 		lines.append("")
 		lines.append(_result_text())
+	elif mode == "paused":
+		lines.append("")
+		lines.append("PAUSED   Esc: carry on")
+		lines.append("G: give up. Philius hauls you out; half the bag is lost.")
+		lines.append(
+			"Q: quit the game. The trip never happened: you're back as you were before setting out."
+		)
 	else:
 		var hint := (
 			"WASD move  Q survey (%d)  F flare  T anchor (%d)  R ration  E use"
@@ -326,7 +362,7 @@ func _draw() -> void:
 					draw_circle(
 						o + Vector2(3 + 5 * k, 3 + 4 * ((k + run.ticks) % 3)), 1, Color.WHEAT
 					)
-	if run.depth == 1:
+	if run.depth <= run.rope_floors:
 		_mark(run.floor_data["entry"], COLORS["rope"], "rope")
 	for an in run.anchors:
 		_mark(an, COLORS["rope"], "anchor")

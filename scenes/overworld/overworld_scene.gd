@@ -3,8 +3,10 @@ extends Node2D
 ## runs (D35). Walking is free, gathering costs stamina, and time only moves when you rest at
 ## the tent or go into the tomb.
 ##
-## WASD/arrows walk, E use (tent, workbench, Professor Philius, plants, the tomb). At the
-## workbench, 1-3 craft. F5 saves (resting saves too). ` shows the debug overlay.
+## WASD/arrows walk, E use (tent, workbench, Professor Philius, plants, the tomb). Number keys
+## act on what you stand by: craft at the workbench, sell to a trader, donate to a collector,
+## put finds on the shelf (0 takes one down), build from the camp plans. J opens the journal,
+## Esc the menu. F5 saves (resting saves too). ` shows the debug overlay.
 
 const IslandMap := preload("res://core/overworld/island_map.gd")
 const Calendar := preload("res://core/calendar.gd")
@@ -13,6 +15,8 @@ const Crafting := preload("res://core/overworld/crafting.gd")
 const Philius := preload("res://core/overworld/philius.gd")
 const Boat := preload("res://core/boat.gd")
 const Finds := preload("res://core/finds.gd")
+const Camp := preload("res://core/overworld/camp.gd")
+const Story := preload("res://core/overworld/story.gd")
 const DebugOverlay := preload("res://scenes/debug/debug_overlay.gd")
 
 const TILE := 16
@@ -54,6 +58,8 @@ const COLORS := {
 	"sail": Color("efe6d0"),
 	"trader": Color("e0a040"),
 	"collector": Color("40c0a0"),
+	"shelf": Color("b08850"),
+	"plans": Color("e8e0c8"),
 }
 ## Map characters with a fixed colour (grass and jungle change with the season).
 const GROUND := {
@@ -87,6 +93,10 @@ var _camera := Camera2D.new()
 var _hud_layer := CanvasLayer.new()
 var _hud := Label.new()
 var _prompt := Label.new()
+## A full-screen page over the island: the journal or the menu. Walking stops while it's open.
+var _page := Label.new()
+## "", "journal" or "menu".
+var _page_kind := ""
 
 
 func _ready() -> void:
@@ -106,6 +116,15 @@ func _ready() -> void:
 	_prompt.add_theme_stylebox_override("normal", panel)
 	_hud_layer.add_child(_hud)
 	_hud_layer.add_child(_prompt)
+	var page_bg := StyleBoxFlat.new()
+	page_bg.bg_color = Color(0.05, 0.05, 0.08, 0.92)
+	page_bg.set_content_margin_all(10)
+	_page.add_theme_stylebox_override("normal", page_bg)
+	_page.add_theme_font_size_override("font_size", 8)
+	_page.position = Vector2(20, 14)
+	_page.size = Vector2(440, 242)
+	_page.visible = false
+	_hud_layer.add_child(_page)
 	add_child(_hud_layer)
 	add_child(DebugOverlay.new())
 	GameState.changed.connect(_refresh)
@@ -116,6 +135,8 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _page_kind != "":
+		return
 	var dir := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	dir += _wasd()
 	if dir == Vector2.ZERO:
@@ -135,14 +156,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or key.echo:
 		return
+	if _page_kind != "" or key.keycode in [KEY_ESCAPE, KEY_J]:
+		_page_key(key.keycode)
+		if is_inside_tree():
+			get_viewport().set_input_as_handled()
+			_refresh()
+		return
 	match key.keycode:
 		KEY_E:
 			_use()
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			_number(key.keycode - KEY_1)
 		KEY_0:
-			if _near_kind() == "trader":
-				_message = GameState.sell_crystals()
+			match _near_kind():
+				"trader":
+					_message = GameState.sell_crystals()
+				"shelf":
+					_message = GameState.take_down()
 		KEY_Z, KEY_X, KEY_C:
 			if _near_kind() == "trader":
 				_message = GameState.buy_gear(GEAR_KEYS[key.keycode])
@@ -172,6 +202,35 @@ func _number(n: int) -> void:
 			var finds := _listed_finds(_collection_here())
 			if n < finds.size():
 				_message = GameState.donate(finds[n])
+		"shelf":
+			var finds := _listed_finds("")
+			if n < finds.size():
+				_message = GameState.display(finds[n])
+		"plans":
+			if n < Camp.ORDER.size():
+				var id: String = Camp.ORDER[n]
+				var why := GameState.build(id)
+				_message = "Built: %s." % Camp.UPGRADES[id]["name"] if why == "" else why
+
+
+## Keys while the journal or the menu is open (or opening them).
+func _page_key(keycode: int) -> void:
+	if _page_kind == "menu":
+		match keycode:
+			KEY_ENTER, KEY_KP_ENTER:
+				SaveService.save_game()
+				get_tree().change_scene_to_file("res://scenes/title/title.tscn")
+			KEY_Q:
+				SaveService.save_game()
+				get_tree().quit()
+			KEY_ESCAPE:
+				_page_kind = ""
+		return
+	if _page_kind == "journal":
+		if keycode in [KEY_ESCAPE, KEY_J]:
+			_page_kind = ""
+		return
+	_page_kind = "journal" if keycode == KEY_J else "menu"
 
 
 ## Indices into the saved finds, at most LIST_MAX, optionally only one collection's.
@@ -220,12 +279,10 @@ func _use() -> void:
 			)
 		"bench":
 			_message = "The workbench. Press 1, 2 or 3 to make gear."
+		"shelf", "plans":
+			_message = ""
 		"philius":
-			var season: String = Calendar.SEASONS[Calendar.season(GameState.day())]
-			_message = (
-				'Professor Philius: "%s"'
-				% Philius.line(season, Calendar.is_night(GameState.half()), _philius_talks)
-			)
+			_message = _philius_says()
 			_philius_talks += 1
 		"tomb":
 			_use_tomb()
@@ -234,6 +291,21 @@ func _use() -> void:
 		_:
 			var why := GameState.gather(thing["id"], thing["kind"])
 			_message = ("Gathered %s." % Forage.display_name(thing["kind"]) if why == "" else why)
+
+
+## The story first (D46), then a reminder of what he's waiting for, then idle chatter.
+func _philius_says() -> String:
+	var story := GameState.story_talk()
+	if not story.is_empty():
+		return (
+			"Professor Philius:\n"
+			+ "\n".join(story.map(func(l: String) -> String: return '"%s"' % l))
+		)
+	var line := Story.reminder(GameState.story_stage()) if _philius_talks % 3 == 0 else ""
+	if line == "":
+		var season: String = Calendar.SEASONS[Calendar.season(GameState.day())]
+		line = Philius.line(season, Calendar.is_night(GameState.half()), _philius_talks)
+	return 'Professor Philius: "%s"' % line
 
 
 func _use_tomb() -> void:
@@ -251,6 +323,8 @@ func _use_tomb() -> void:
 			% [GameState.stamina(), g["anchor"], g["flare"], g["ration"]]
 		)
 		return
+	# Save first: quitting the game mid-expedition comes back to this moment.
+	SaveService.save_game()
 	GameState.pack_for_expedition()
 	get_tree().change_scene_to_file("res://scenes/expedition/expedition.tscn")
 
@@ -335,7 +409,10 @@ func _refresh() -> void:
 	if int(inv.get("Crystal", 0)) > 0:
 		parts.append("Crystal %d" % inv["Crystal"])
 	_hud.text = (
-		"%s %s\nStamina %d/%d   Coin %d   Pack: anchors %d  flares %d  rations %d   Finds %d\n%s"
+		(
+			"%s %s   J journal  Esc menu\n"
+			+ "Stamina %d/%d   Coin %d   Pack: anchors %d  flares %d  rations %d   Finds %d\n%s"
+		)
 		% [
 			Calendar.describe(GameState.day(), GameState.half()),
 			"The supply boat is in." if not GameState.boat_here().is_empty() else "",
@@ -349,9 +426,11 @@ func _refresh() -> void:
 			"  ".join(parts) if not parts.is_empty() else "Nothing gathered yet."
 		]
 	)
+	_page.visible = _page_kind != ""
+	_page.text = _journal_text() if _page_kind == "journal" else _menu_text()
 	_prompt.text = _prompt_text() + ("\n" + _message if _message != "" else "")
 	# Grow the prompt upward so long lists stay on screen.
-	_prompt.visible = _prompt.text != ""
+	_prompt.visible = _prompt.text != "" and _page_kind == ""
 	_prompt.reset_size()
 	_prompt.position.y = 266 - _prompt.size.y
 	queue_redraw()
@@ -365,13 +444,97 @@ func _prompt_text() -> String:
 	var kind: String = thing["kind"]
 	if PROMPTS.has(kind):
 		return PROMPTS[kind]
-	if kind == "trader":
-		return _trader_prompt()
-	if kind == "collector":
-		return _collector_prompt()
-	if kind == "bench":
-		return _bench_prompt()
+	var by_kind := {
+		"trader": _trader_prompt,
+		"collector": _collector_prompt,
+		"bench": _bench_prompt,
+		"shelf": _shelf_prompt,
+		"plans": _plans_prompt,
+	}
+	if by_kind.has(kind):
+		return (by_kind[kind] as Callable).call()
 	return _plant_prompt(thing)
+
+
+func _shelf_prompt() -> String:
+	var shelf := GameState.shelf()
+	var lines: Array[String] = [
+		(
+			"Display shelf, %d of %d: tunnel hints are right %d%% of the time"
+			% [shelf.size(), Camp.SHELF_SLOTS, roundi(Camp.hint_accuracy(shelf.size()) * 100)]
+		)
+	]
+	for f: Dictionary in shelf:
+		lines.append("  " + Finds.describe(f))
+	var finds: Array = GameState.data["finds"]
+	var listed := _listed_finds("")
+	if shelf.size() < Camp.SHELF_SLOTS:
+		for k in listed.size():
+			lines.append("%d put out %s" % [k + 1, Finds.describe(finds[listed[k]])])
+	if not shelf.is_empty():
+		lines.append("0 take down the %s" % shelf[-1]["id"])
+	return "\n".join(lines)
+
+
+func _plans_prompt() -> String:
+	var lines: Array[String] = ["Camp plans (you have %d coin):" % GameState.coin()]
+	for k in Camp.ORDER.size():
+		var id: String = Camp.ORDER[k]
+		var u: Dictionary = Camp.UPGRADES[id]
+		var state := "built" if GameState.built().has(id) else "%d coin" % u["cost"]
+		lines.append("%d %s (%s): %s" % [k + 1, u["name"], state, u["about"]])
+	return "\n".join(lines)
+
+
+func _menu_text() -> String:
+	return (
+		"\n"
+		. join(
+			[
+				"PAUSED",
+				"",
+				"Esc   back to the island",
+				"Enter save and go to the title screen",
+				"Q     save and quit",
+			]
+		)
+	)
+
+
+## The journal (D45): every find you know of, by collection, and Philius's notes.
+func _journal_text() -> String:
+	var d: Dictionary = GameState.data
+	var seen: Dictionary = d["journal"]["seen"]
+	var lines: Array[String] = ["JOURNAL   (J or Esc closes)", ""]
+	for c: String in Finds.COLLECTIONS:
+		var info: Dictionary = Finds.COLLECTIONS[c]
+		var m: Dictionary = d["museums"].get(c, {"donated": [], "renown": 0})
+		var names: Array[String] = []
+		for id: String in info["finds"]:
+			var where := ""
+			if m["donated"].has(id):
+				where = " (donated)"
+			elif GameState.shelf().any(func(f: Dictionary) -> bool: return f["id"] == id):
+				where = " (on the shelf)"
+			names.append((id + where) if seen.has(id) else "???")
+		lines.append("%s, renown %d: %s" % [info["name"], m["renown"], ", ".join(names)])
+	lines.append("")
+	var built: Array[String] = []
+	for id: String in Camp.ORDER:
+		if GameState.built().has(id):
+			built.append(Camp.UPGRADES[id]["name"])
+	lines.append("Camp: " + (", ".join(built) if not built.is_empty() else "nothing built yet"))
+	lines.append(
+		"Expeditions: %d   Coin: %d" % [int(d["flags"].get("expeditions", 0)), GameState.coin()]
+	)
+	lines.append("")
+	lines.append("Notes:")
+	var notes: Array = d["journal"]["notes"]
+	if notes.is_empty():
+		lines.append("  Nothing yet. Philius says to go into the tomb and come back out.")
+	for n: String in notes:
+		lines.append("  - " + n)
+	return "\n".join(lines)
 
 
 func _bench_prompt() -> String:
@@ -504,6 +667,12 @@ func _draw_thing(t: Dictionary, night: bool) -> void:
 			)
 		"bench":
 			draw_rect(Rect2(o + Vector2(1, 5), Vector2(14, 6)), COLORS["bench"])
+		"shelf":
+			draw_rect(Rect2(o + Vector2(1, 2), Vector2(14, 12)), COLORS["shelf"])
+			for k in mini(GameState.shelf().size(), Camp.SHELF_SLOTS):
+				draw_rect(Rect2(o + Vector2(2 + k * 2.6, 5), Vector2(2, 3)), Color("7ff0c0"))
+		"plans":
+			draw_rect(Rect2(o + Vector2(3, 2), Vector2(10, 12)), COLORS["plans"])
 		"philius":
 			draw_circle(centre + Vector2(0, 2), 5, COLORS["philius"])
 			draw_rect(Rect2(o + Vector2(3, 1), Vector2(10, 3)), Color("3a2a1a"))

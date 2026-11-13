@@ -59,7 +59,14 @@ var stamina: int
 var flares := FLARES
 var anchors_left := 0
 var rations := 0
-## Night and the Rains change the tomb (D36): {night: bool, rains: bool}.
+## Camp upgrades and the display shelf (D44, D45) change these; see Camp.expedition_boosts.
+var sight := SIGHT
+var bag_slots := BAG_SLOTS
+var max_stamina := MAX_STAMINA
+## Floors with a rope out at the top: 1, or 2 with the fixed rope.
+var rope_floors := 1
+## Night and the Rains change the tomb (D36): {night: bool, rains: bool}. Camp adds sight,
+## bag_slots, rope_floors, hint_accuracy and max_stamina (all optional).
 var conditions: Dictionary = {}
 ## Rope anchors placed on this floor: ways out.
 var anchors: Array[Vector2i] = []
@@ -108,6 +115,10 @@ func _init(
 	seed_value = p_seed
 	stamina = p_stamina
 	conditions = p_conditions
+	sight = int(conditions.get("sight", SIGHT))
+	bag_slots = int(conditions.get("bag_slots", BAG_SLOTS))
+	max_stamina = int(conditions.get("max_stamina", MAX_STAMINA))
+	rope_floors = int(conditions.get("rope_floors", 1))
 	if not pack.is_empty():
 		flares = int(pack.get("flare", 0))
 		anchors_left = int(pack.get("anchor", 0))
@@ -160,6 +171,8 @@ func enter_floor(d: int) -> void:
 	_reveal()
 	if d == 1:
 		_say("Into the tomb. Tunnels branch ahead; every drop is one way.")
+	elif d <= rope_floors:
+		_say("Floor %d. Your fixed rope hangs here: a way out." % d)
 	else:
 		_say("Floor %d. No rope down here: you'll need a way out." % d)
 
@@ -182,7 +195,7 @@ func _creature_at(p: Vector2i) -> int:
 
 
 func bag_full() -> bool:
-	return bag.size() >= BAG_SLOTS
+	return bag.size() >= bag_slots
 
 
 ## A creature is closing in: near, not stunned and not fleeing.
@@ -261,7 +274,7 @@ func move(dir: Vector2i) -> bool:
 	var spring := springs.find(player)
 	if spring >= 0:
 		springs.remove_at(spring)
-		var gain := mini(SPRING_GAIN, MAX_STAMINA - stamina)
+		var gain := mini(SPRING_GAIN, max_stamina - stamina)
 		stamina += gain
 		_say("Cold spring water. +%d stamina." % gain)
 	_reveal()
@@ -313,10 +326,10 @@ func use_flare() -> bool:
 	return true
 
 
-## A way out under your feet (D38): the rope you came in by (floor 1 only), an anchor you
-## placed, a natural shaft, or the far end of the last floor.
+## A way out under your feet (D38): the rope you came in by (floor 1, or 2 with the fixed
+## rope, D44), an anchor you placed, a natural shaft, or the far end of the last floor.
 func can_climb_out() -> bool:
-	if (depth == 1 and _on_entry()) or anchors.has(player) or on_shaft():
+	if (depth <= rope_floors and _on_entry()) or anchors.has(player) or on_shaft():
 		return true
 	return on_exit() and depth >= FLOORS
 
@@ -361,7 +374,7 @@ func eat_ration() -> String:
 	if rations <= 0:
 		return "No rations left."
 	rations -= 1
-	var gain := mini(RATION_GAIN, MAX_STAMINA - stamina)
+	var gain := mini(RATION_GAIN, max_stamina - stamina)
 	stamina += gain
 	_say("You eat a trail ration. +%d stamina." % gain)
 	_tick()
@@ -462,8 +475,17 @@ func _spend(amount: int) -> void:
 		_collapse()
 
 
+## Gives up the expedition from wherever you are (the pause menu): Philius hauls you out, and
+## half the bag is lost as if you had collapsed.
+func give_up() -> bool:
+	if is_over():
+		return false
+	_collapse("You give up and tug the line. Professor Philius hauls you out")
+	return true
+
+
 ## Out of stamina: Professor Philius drags you home. Half the bag (rounded up) is lost.
-func _collapse() -> void:
+func _collapse(how: String = "You collapse. Professor Philius drags you home") -> void:
 	state = "collapsed"
 	var lose := ceili(bag.size() / 2.0)
 	var order := _rng.shuffled(range(bag.size()))
@@ -472,12 +494,7 @@ func _collapse() -> void:
 	drop.reverse()
 	for i: int in drop:
 		bag.remove_at(i)
-	_say(
-		(
-			"You collapse. Professor Philius drags you home; %d item%s lost."
-			% [lose, "" if lose == 1 else "s"]
-		)
-	)
+	_say("%s; %d item%s lost." % [how, lose, "" if lose == 1 else "s"])
 
 
 func _tick() -> void:
@@ -657,7 +674,7 @@ func _reveal() -> void:
 			var c := FloorGen.chamber_at(floor_data, n)
 			if c >= 0 and c != here:
 				continue
-			if dist[p] + 1 > SIGHT:
+			if dist[p] + 1 > sight:
 				continue
 			lit[n] = true
 			if FloorGen.open(FloorGen.tile_at(floor_data, n)):
