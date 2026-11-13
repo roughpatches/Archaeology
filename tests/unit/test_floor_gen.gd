@@ -86,3 +86,32 @@ func test_no_creatures_on_floor_one() -> void:
 		var f := FloorGen.generate(s, 1)
 		for c: Dictionary in f["chambers"]:
 			assert_ne(c["kind"], "creature", "seed %d" % s)
+
+
+func test_night_brings_creatures_and_the_rains_bring_streams() -> void:
+	var day_creatures := 0
+	var night_creatures := 0
+	var dry_streams := 0
+	var wet_streams := 0
+	for s in 40:
+		var day := FloorGen.generate(s, 1)
+		var night := FloorGen.generate(s, 1, {"night": true})
+		var wet := FloorGen.generate(s, 1, {"rains": true})
+		for c: Dictionary in day["chambers"]:
+			day_creatures += 1 if c["kind"] == "creature" else 0
+			dry_streams += 1 if c["stream_x"] >= 0 else 0
+		for c: Dictionary in night["chambers"]:
+			night_creatures += 1 if c["kind"] == "creature" else 0
+		for c: Dictionary in wet["chambers"]:
+			wet_streams += 1 if c["stream_x"] >= 0 else 0
+	assert_eq(day_creatures, 0, "none on floor 1 by day")
+	assert_true(night_creatures > 0)
+	assert_true(wet_streams > dry_streams)
+
+
+func test_a_draft_only_ever_points_at_a_real_shaft() -> void:
+	for s in 60:
+		var f := FloorGen.generate(s, 2)
+		for t: Dictionary in f["tunnels"]:
+			if t["draft"]:
+				assert_ne(f["chambers"][t["to"]]["shaft"], FloorGen.NO_SHAFT, "seed %d" % s)

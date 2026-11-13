@@ -6,8 +6,9 @@ below is a starting value for tuning.
 
 ## The run
 
-- Press **X** at the camp placeholder. An expedition starts on floor 1 with the day's stamina
-  (100 on a fresh day).
+- Walk to the **tomb entrance** on the island and press E twice. An expedition starts on floor 1
+  with the stamina you have and all your gear (D39), and always takes half a day (D35). At
+  night the tomb has more creatures; in the Rains, more streams (D36).
 - The first expedition is an **ancient jungle tomb** (D33).
 - Each floor is generated from a seed as **branching tunnels** (D31): it runs left to right
   through 5 layers of chambers. You land in the first chamber, where the **rope** (green) is.
@@ -34,8 +35,10 @@ below is a starting value for tuning.
 | Clear a rubble tile (walk into it) | 3   |
 | Hit by a rockfall              | 8       |
 
-- **Climb out** (E on the rope at a floor's landing, or at the far end of floor 5) to end the run
-  with the whole bag. So the push-or-return choice comes at each landing, before the first fork.
+- **Climb out** (E on a way out) to end the run with the whole bag. **Getting out is part of the
+  run (D38):** the rope you came in by is only on floor 1. Deeper, you need a rope anchor you
+  rig (T, in a chamber, 4 stamina), a natural shaft ("daylight"; a hint mentioning a warm draft
+  leads to one), or the far end of floor 5. Rations (R) give back 20 stamina.
 - **Run out of stamina** and Professor Philius drags you home: you lose half the bag, rounded up.
 - The bag holds 8 items. Two flares per run.
 

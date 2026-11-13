@@ -18,9 +18,8 @@ with the in-repo runner (D27). Lint and format with gdtoolkit (`gdlint`, `gdform
 - No `class_name` in `core/`: other scripts reach it through `preload("res://core/...")` constants.
   That keeps headless tests independent of the editor's class cache and avoids name clashes with
   autoloads.
-- **Prove the verb before building around it.** Next is the expedition feel prototype (gray-box
-  shapes, debug overlay showing internal values). No art, content or adjacent systems until it passes
-  a playtest in PLAYTEST_LOG.md.
+- **Prove the verb before building around it.** Gray-box shapes and a debug overlay first. No art,
+  content or adjacent systems until a mechanic passes a playtest in PLAYTEST_LOG.md.
 - Every tuning number is a starting value, not a decision.
 - New decisions go into DECISIONS.md with the next number. Never edit a decision silently; supersede
   it.

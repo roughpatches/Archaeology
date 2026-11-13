@@ -2,6 +2,26 @@
 
 One entry per playtest, newest first. Copy the template at the bottom.
 
+## Build: expedition gray-box (branching tunnels, shifting jungle tomb), 12 Nov 2026
+
+What I played: the expedition on the Mac, through three rounds of changes the same day.
+
+Read — was it clear what was happening? Mostly. The dig said "Can't (brush costs 2)" with no sign
+of a stamina limit; fixed so the message names the real reason.
+
+Decide — did I face a real choice? Asked for floors as tunnels with branching forward paths,
+chosen on limited or incomplete knowledge (D31), and for the environment to shift around the
+player: rockfalls, collapses, streams (D32). Rooms should feel big, without seeing where you came
+from or where you're going (D34).
+
+Feedback — did good vs bad outcomes feel different? Not reported in detail.
+
+Where it felt flat: the first room-grid version; reworked as above.
+
+Bugs/visual issues: the dig message above.
+
+Verdict: PASS ("okay great this is what i had in mind"). Merged as PR #3.
+
 ## Build: gray-box dig v1, 9 Nov 2026
 
 What I played: the first gray-box (trowel and brush, one find, three map grades), as a published

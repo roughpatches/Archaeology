@@ -3,7 +3,7 @@ extends RefCounted
 ##
 ## Any change to the shape bumps CURRENT_VERSION and adds a _from_N step plus a test.
 
-const CURRENT_VERSION := 1
+const CURRENT_VERSION := 2
 
 
 ## Fresh state for a new game on the given world seed.
@@ -12,12 +12,21 @@ static func new_game_data(world_seed: int) -> Dictionary:
 		"version": CURRENT_VERSION,
 		"world_seed": world_seed,
 		"day": 1,
+		"half": 0,
 		"stamina": {"current": 100, "max": 100},
+		"gear": starting_gear(),
+		"forage": {},
 		"inventory": {},
 		"finds": [],
 		"camp": {"buildings": []},
 		"flags": {},
 	}
+
+
+## The pack you start with: one rope anchor and two flares, so the first expedition has a way
+## out besides the rope you came in by.
+static func starting_gear() -> Dictionary:
+	return {"anchor": 1, "flare": 2, "ration": 0}
 
 
 ## Returns an up-to-date copy of a save, or an empty dictionary if it can't be read
@@ -33,6 +42,8 @@ static func migrate(raw: Variant) -> Dictionary:
 		match version:
 			0:
 				out = _from_0(out)
+			1:
+				out = _from_1(out)
 		version += 1
 		out["version"] = version
 	return out
@@ -45,4 +56,12 @@ static func _from_0(data: Dictionary) -> Dictionary:
 	for key: String in base:
 		if not data.has(key):
 			data[key] = base[key]
+	return data
+
+
+## Version 1 to 2 (D35, D39): saves gain the half of the day, a gear pack, and plant regrowth.
+static func _from_1(data: Dictionary) -> Dictionary:
+	data["half"] = 0
+	data["gear"] = starting_gear()
+	data["forage"] = {}
 	return data

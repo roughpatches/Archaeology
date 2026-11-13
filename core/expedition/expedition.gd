@@ -17,6 +17,10 @@ const SURVEY_RADIUS := 5
 const DESCEND_COST := 3
 const MINE_COST := 2
 const FLARES := 2
+## Getting out (D38): a rope anchor makes a way out where you stand in a chamber.
+const ANCHOR_COST := 4
+## A trail ration (D39) gives back stamina.
+const RATION_GAIN := 20
 const FLARE_RADIUS := 6
 const FLEE_TICKS := 8
 const CHASE_RANGE := 5
@@ -56,6 +60,12 @@ var seed_value: int
 var depth := 0
 var stamina: int
 var flares := FLARES
+var anchors_left := 0
+var rations := 0
+## Night and the Rains change the tomb (D36): {night: bool, rains: bool}.
+var conditions: Dictionary = {}
+## Rope anchors placed on this floor: ways out.
+var anchors: Array[Vector2i] = []
 ## Items carried: finds {kind: "find", id, rarity, condition, context} or {kind: "material", id}.
 var bag: Array[Dictionary] = []
 ## "exploring", "climbed_out" or "collapsed".
@@ -93,15 +103,25 @@ var _rng: SeededRng
 var _quake_rng: SeededRng
 
 
-func _init(p_seed: int = 0, p_stamina: int = 100) -> void:
+## pack: gear brought in, {anchor, flare, ration}. Empty means the gray-box default (two
+## flares, nothing else).
+func _init(
+	p_seed: int = 0, p_stamina: int = 100, pack: Dictionary = {}, p_conditions: Dictionary = {}
+) -> void:
 	seed_value = p_seed
 	stamina = p_stamina
+	conditions = p_conditions
+	if not pack.is_empty():
+		flares = int(pack.get("flare", 0))
+		anchors_left = int(pack.get("anchor", 0))
+		rations = int(pack.get("ration", 0))
 	enter_floor(1)
 
 
 func enter_floor(d: int) -> void:
 	depth = d
-	floor_data = FloorGen.generate(SeededRng.derive(seed_value, ["floor", d]), d)
+	floor_data = FloorGen.generate(SeededRng.derive(seed_value, ["floor", d]), d, conditions)
+	anchors = []
 	_rng = SeededRng.new(SeededRng.derive(seed_value, ["contents", d]))
 	_quake_rng = SeededRng.new(SeededRng.derive(seed_value, ["quakes", d]))
 	collapsed = {}
@@ -141,7 +161,10 @@ func enter_floor(d: int) -> void:
 		if chamber["stream_x"] >= 0:
 			streams.append({"chamber": i, "x": chamber["stream_x"], "dir": _rng.pick([-1, 1])})
 	_reveal()
-	_say("Floor %d of the tomb. Tunnels branch ahead; every drop is one way." % d)
+	if d == 1:
+		_say("Into the tomb. Tunnels branch ahead; every drop is one way.")
+	else:
+		_say("Floor %d. No rope down here: you'll need a way out." % d)
 
 
 # ---- reading the state ------------------------------------------------------------------
@@ -210,6 +233,8 @@ func tunnel_hints() -> Array[Dictionary]:
 		var text: String = FloorGen.HINTS[kind]
 		if collapsed.has(i):
 			text = "caved in"
+		elif t["draft"]:
+			text += ", a warm draft"
 		out.append({"pos": t["mouth"], "text": text, "checked": checked or collapsed.has(i)})
 	return out
 
@@ -291,8 +316,59 @@ func use_flare() -> bool:
 	return true
 
 
+## A way out under your feet (D38): the rope you came in by (floor 1 only), an anchor you
+## placed, a natural shaft, or the far end of the last floor.
 func can_climb_out() -> bool:
-	return _on_entry() or (on_exit() and depth >= FLOORS)
+	if (depth == 1 and _on_entry()) or anchors.has(player) or on_shaft():
+		return true
+	return on_exit() and depth >= FLOORS
+
+
+func on_shaft() -> bool:
+	return _is_shaft(player)
+
+
+func _is_shaft(p: Vector2i) -> bool:
+	var c := FloorGen.chamber_at(floor_data, p)
+	return c >= 0 and floor_data["chambers"][c]["shaft"] == p
+
+
+## Gear not used, to go back to camp.
+func pack_left() -> Dictionary:
+	return {"anchor": anchors_left, "flare": flares, "ration": rations}
+
+
+## Drives a rope anchor in here: from now on you can climb out from this tile.
+func place_anchor() -> String:
+	if is_over():
+		return "The expedition is over."
+	if anchors_left <= 0:
+		return "No rope anchors left."
+	if FloorGen.chamber_at(floor_data, player) < 0:
+		return "The tunnel is too tight to rig a rope. Try a chamber."
+	if can_climb_out():
+		return "There's already a way out here."
+	if stamina < ANCHOR_COST:
+		return "Too tired to rig a rope."
+	anchors_left -= 1
+	anchors.append(player)
+	_say("You drive in a rope anchor. A way out, right here.")
+	_spend(ANCHOR_COST)
+	_tick()
+	return ""
+
+
+func eat_ration() -> String:
+	if is_over():
+		return "The expedition is over."
+	if rations <= 0:
+		return "No rations left."
+	rations -= 1
+	var gain := mini(RATION_GAIN, MAX_STAMINA - stamina)
+	stamina += gain
+	_say("You eat a trail ration. +%d stamina." % gain)
+	_tick()
+	return ""
 
 
 ## Takes the way down, if standing on it. The last floor has no way down.
@@ -558,6 +634,8 @@ func _rockfall_tiles() -> Array[Vector2i]:
 		if FloorGen.tile_at(floor_data, p) != FloorGen.Tile.FLOOR:
 			continue
 		if p == floor_data["entry"] or (floor_data["exits"] as Array).has(p):
+			continue
+		if anchors.has(p) or _is_shaft(p):
 			continue
 		out.append(p)
 	return out

@@ -45,6 +45,15 @@ const CHAMBER_NAMES: Array[String] = [
 ]
 ## Chance a chamber (not the landing) has a stream running through it, top to bottom.
 const STREAM_CHANCE := 0.4
+## In the Rains (D36) the tomb is wetter.
+const RAINS_STREAM_CHANCE := 0.7
+## At night more of the tomb's creatures are about (D36).
+const NIGHT_CREATURE_WEIGHT := 10
+## Chance a middle chamber has a natural way out (a shaft to the surface, D38), and that the
+## tunnel leading to it carries a warm draft you can notice.
+const SHAFT_CHANCE := 0.2
+const DRAFT_CHANCE := 0.75
+const NO_SHAFT := Vector2i(-1, -1)
 ## Columns (from the chamber's left edge) a stream may run down.
 const STREAM_MIN_X := 2
 const STREAM_MAX_X := CHAMBER.x - 3
@@ -59,12 +68,17 @@ const LAST_SLOTS := [[1], [0, 2], [0, 1, 2]]
 ## Returns {
 ##   size: Vector2i, tiles: PackedByteArray (Tile values, row-major),
 ##   chambers: Array of {layer, slot, rect: Rect2i, centre: Vector2i, kind: String,
-##     name: String, stream_x: int (tile column of its stream, or -1)},
+##     name: String, stream_x: int (tile column of its stream, or -1),
+##     shaft: Vector2i (a natural way out, or NO_SHAFT)},
 ##   tunnels: Array of {from, to (chamber indices), path: Array[Vector2i] (mouth first, ledge
-##     last), mouth: Vector2i, ledge: Vector2i, hint: String (a KINDS value)},
+##     last), mouth: Vector2i, ledge: Vector2i, hint: String (a KINDS value),
+##     draft: bool (a shaft lies beyond, and you can feel it)},
 ##   entry: Vector2i (the landing, chamber 0's centre), exits: Array[Vector2i] (way down),
 ## }.
-static func generate(seed_value: int, depth: int = 1) -> Dictionary:
+## conditions: {night: bool, rains: bool} from the island's time and season.
+static func generate(seed_value: int, depth: int = 1, conditions: Dictionary = {}) -> Dictionary:
+	var night := bool(conditions.get("night", false))
+	var stream_chance := RAINS_STREAM_CHANCE if conditions.get("rains", false) else STREAM_CHANCE
 	var rng := SeededRng.new(seed_value)
 	var tiles := PackedByteArray()
 	tiles.resize(SIZE.x * SIZE.y)
@@ -81,7 +95,12 @@ static func generate(seed_value: int, depth: int = 1) -> Dictionary:
 		var ids: Array[int] = []
 		for slot: int in slots:
 			ids.append(chambers.size())
-			chambers.append(_make_chamber(tiles, rng, layer, slot, depth))
+			var chamber := _make_chamber(tiles, rng, layer, slot, stream_chance)
+			chamber["kind"] = KINDS[rng.weighted_index(kind_weights(depth, night))]
+			chamber["shaft"] = NO_SHAFT
+			if layer > 0 and layer < LAYERS - 1 and rng.chance(SHAFT_CHANCE):
+				chamber["shaft"] = (chamber["rect"] as Rect2i).position + Vector2i(1, 1)
+			chambers.append(chamber)
 		by_layer.append(ids)
 	chambers[0]["kind"] = "empty"
 	_ensure_a_dig(chambers, rng)
@@ -95,12 +114,14 @@ static func generate(seed_value: int, depth: int = 1) -> Dictionary:
 			var kind: String = chambers[link[1]]["kind"]
 			if not rng.chance(HINT_ACCURACY):
 				# A wrong hint is still something this floor could hold.
-				var weights := kind_weights(depth)
+				var weights := kind_weights(depth, night)
 				var others := KINDS.filter(
 					func(k: String) -> bool: return k != kind and weights[KINDS.find(k)] > 0
 				)
 				kind = rng.pick(others)
 			tunnel["hint"] = kind
+			var shaft: Vector2i = chambers[link[1]]["shaft"]
+			tunnel["draft"] = shaft != NO_SHAFT and rng.chance(DRAFT_CHANCE)
 			tunnels.append(tunnel)
 
 	var exits: Array[Vector2i] = []
@@ -215,7 +236,7 @@ static func _origin(layer: int, slot: int) -> Vector2i:
 ## open from side to side, because tunnels leave and arrive on them. Some chambers have a
 ## stream running down one column; it is shallow, so the player can wade it, but creatures won't.
 static func _make_chamber(
-	tiles: PackedByteArray, rng: SeededRng, layer: int, slot: int, depth: int
+	tiles: PackedByteArray, rng: SeededRng, layer: int, slot: int, stream_chance: float
 ) -> Dictionary:
 	var origin := _origin(layer, slot)
 	for y in CHAMBER.y:
@@ -226,7 +247,7 @@ static func _make_chamber(
 			if rng.chance(0.3):
 				tiles[_index(origin + Vector2i(x, y))] = Tile.PILLAR
 	var stream_x := -1
-	if layer > 0 and rng.chance(STREAM_CHANCE):
+	if layer > 0 and rng.chance(stream_chance):
 		stream_x = origin.x + rng.range_int(STREAM_MIN_X, STREAM_MAX_X)
 		for y in CHAMBER.y:
 			tiles[_index(Vector2i(stream_x, origin.y + y))] = Tile.WATER
@@ -237,13 +258,14 @@ static func _make_chamber(
 		"slot": slot,
 		"rect": Rect2i(origin, CHAMBER),
 		"centre": origin + CHAMBER / 2,
-		"kind": KINDS[rng.weighted_index(kind_weights(depth))],
 	}
 
 
-## How likely each of KINDS is at a depth. No creatures on floor 1.
-static func kind_weights(depth: int) -> Array:
+## How likely each of KINDS is at a depth. No creatures on floor 1 by day.
+static func kind_weights(depth: int, night: bool = false) -> Array:
 	var creature := 0 if depth <= 1 else 8 + 6 * (depth - 2)
+	if night:
+		creature += NIGHT_CREATURE_WEIGHT
 	return [35, 25, creature, 12, 15]
 
 

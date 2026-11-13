@@ -24,6 +24,7 @@ const COLORS := {
 	"unseen": Color("050504"),
 	"player": Color("4aa3ff"),
 	"rope": Color("5fd35f"),
+	"shaft": Color("fff3a8"),
 	"stairs": Color("b07cff"),
 	"spot": Color("ff9a3c"),
 	"spot_mapped": Color("ffd84a"),
@@ -38,12 +39,18 @@ const COLORS := {
 }
 ## The camera is close in, so a chamber is bigger than the screen (D34).
 const ZOOM := 2.0
+## Seconds the player takes to glide one tile.
+const STEP_TIME := 0.14
 
 var run: Expedition
 var mode := "explore"
 var dig_spot := -1
 
 var _camera := Camera2D.new()
+## Where the player is drawn, in pixels: it glides to the player's tile after each step.
+var _shown := Vector2.ZERO
+## Time left on the current step's glide; holding a direction steps again when it runs out.
+var _step_left := 0.0
 var _hud_layer := CanvasLayer.new()
 var _hud := Label.new()
 var _log := Label.new()
@@ -53,7 +60,10 @@ var _dig_view: DigView
 
 func _ready() -> void:
 	var stamina := int(GameState.data.get("stamina", {}).get("current", 100))
-	run = Expedition.new(randi(), stamina)
+	var pack: Dictionary = GameState.expedition_pack
+	if pack.is_empty():
+		pack = {"anchor": 0, "flare": 0, "ration": 0}
+	run = Expedition.new(randi(), stamina, pack, GameState.expedition_conditions())
 	_camera.zoom = Vector2(ZOOM, ZOOM)
 	add_child(_camera)
 	_hud.position = Vector2(6, 4)
@@ -79,8 +89,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mode == "result":
 		if not key.echo and key.keycode in [KEY_ENTER, KEY_E, KEY_SPACE]:
-			GameState.apply_expedition(run.bag, run.stamina)
-			get_tree().change_scene_to_file("res://scenes/boot/boot.tscn")
+			GameState.apply_expedition(run.bag, run.stamina, run.pack_left())
+			GameState.expedition_pack = {}
+			GameState.back_from_tomb = true
+			SaveService.save_game()
+			get_tree().change_scene_to_file("res://scenes/overworld/overworld.tscn")
 		return
 	if mode == "dig":
 		return  # DigView handles its own keys.
@@ -95,19 +108,70 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_DOWN, KEY_S:
 			dir = Vector2i.DOWN
 	if dir != Vector2i.ZERO:
-		run.move(dir)
-	elif key.echo:
+		if not key.echo and _step_left <= 0.0:
+			_step(dir)
+		get_viewport().set_input_as_handled()
 		return
-	elif key.keycode == KEY_Q:
+	if key.echo:
+		return
+	if key.keycode == KEY_Q:
 		run.survey()
 	elif key.keycode == KEY_F:
 		run.use_flare()
 	elif key.keycode == KEY_E:
 		_interact()
+	elif key.keycode == KEY_T:
+		var why := run.place_anchor()
+		if why != "":
+			run.log_lines.append(why)
+	elif key.keycode == KEY_R:
+		var why := run.eat_ration()
+		if why != "":
+			run.log_lines.append(why)
 	else:
 		return
 	get_viewport().set_input_as_handled()
 	_after_action()
+
+
+## Turn-based rules (D29), smooth look (D41): each step is one tick, and the player glides to
+## the new tile over STEP_TIME. Holding a direction keeps walking.
+func _process(delta: float) -> void:
+	if mode != "explore":
+		return
+	_step_left = maxf(0.0, _step_left - delta)
+	var target := _tile_centre(run.player)
+	if _shown != target:
+		_shown = _shown.move_toward(target, TILE / STEP_TIME * delta)
+		_camera.position = _shown
+		queue_redraw()
+	if _step_left <= 0.0:
+		var dir := _held_direction()
+		if dir != Vector2i.ZERO:
+			_step(dir)
+
+
+func _step(dir: Vector2i) -> void:
+	_step_left = STEP_TIME
+	run.move(dir)
+	_after_action()
+
+
+func _held_direction() -> Vector2i:
+	for pair: Array in [
+		[[KEY_LEFT, KEY_A], Vector2i.LEFT],
+		[[KEY_RIGHT, KEY_D], Vector2i.RIGHT],
+		[[KEY_UP, KEY_W], Vector2i.UP],
+		[[KEY_DOWN, KEY_S], Vector2i.DOWN],
+	]:
+		for k: Key in pair[0]:
+			if Input.is_physical_key_pressed(k):
+				return pair[1]
+	return Vector2i.ZERO
+
+
+func _tile_centre(p: Vector2i) -> Vector2:
+	return Vector2(p * TILE) + Vector2(TILE, TILE) / 2.0
 
 
 func _interact() -> void:
@@ -152,28 +216,38 @@ func _after_action() -> void:
 
 
 func _refresh() -> void:
-	_camera.position = Vector2(run.player * TILE) + Vector2(TILE, TILE) / 2.0
+	if _shown.distance_to(_tile_centre(run.player)) > TILE * 2:
+		_shown = _tile_centre(run.player)
+	_camera.position = _shown
 	var lines: Array[String] = []
-	lines.append(
-		(
-			"Floor %d/%d   Stamina %d   Bag %d/%d   Flares %d"
-			% [
-				run.depth,
-				Expedition.FLOORS,
-				run.stamina,
-				run.bag.size(),
-				Expedition.BAG_SLOTS,
-				run.flares
-			]
+	(
+		lines
+		. append(
+			(
+				"Floor %d/%d   Stamina %d   Bag %d/%d   Flares %d  Anchors %d  Rations %d"
+				% [
+					run.depth,
+					Expedition.FLOORS,
+					run.stamina,
+					run.bag.size(),
+					Expedition.BAG_SLOTS,
+					run.flares,
+					run.anchors_left,
+					run.rations,
+				]
+			)
 		)
 	)
 	if mode == "result":
 		lines.append("")
 		lines.append(_result_text())
 	else:
-		var hint := "Move WASD  Q survey (%d)  F flare  E use" % Expedition.SURVEY_COST
+		var hint := (
+			"WASD move  Q survey (%d)  F flare  T anchor (%d)  R ration  E use"
+			% [Expedition.SURVEY_COST, Expedition.ANCHOR_COST]
+		)
 		if run.can_climb_out():
-			hint += "   [rope: E climbs out]"
+			hint += "   [way out: E climbs out]"
 		elif run.on_ledge():
 			hint += "   [drop: step on and there's no way back]"
 		elif run.on_exit():
@@ -252,7 +326,13 @@ func _draw() -> void:
 					draw_circle(
 						o + Vector2(3 + 5 * k, 3 + 4 * ((k + run.ticks) % 3)), 1, Color.WHEAT
 					)
-	_mark(run.floor_data["entry"], COLORS["rope"], "rope")
+	if run.depth == 1:
+		_mark(run.floor_data["entry"], COLORS["rope"], "rope")
+	for an in run.anchors:
+		_mark(an, COLORS["rope"], "anchor")
+	for c: Dictionary in run.floor_data["chambers"]:
+		if c["shaft"] != FloorGen.NO_SHAFT:
+			_mark(c["shaft"], COLORS["shaft"], "daylight")
 	for e: Vector2i in run.floor_data["exits"]:
 		if run.depth >= Expedition.FLOORS:
 			_mark(e, COLORS["rope"], "rope")
@@ -284,7 +364,7 @@ func _draw() -> void:
 				col = COLORS["creature_stun"]
 			draw_circle(Vector2(cr["pos"] * TILE) + Vector2(TILE, TILE) / 2.0, TILE * 0.4, col)
 	draw_rect(
-		Rect2(Vector2(run.player * TILE) + Vector2(3, 3), Vector2(TILE - 6, TILE - 6)),
+		Rect2(_shown - Vector2(TILE - 6, TILE - 6) / 2.0, Vector2(TILE - 6, TILE - 6)),
 		COLORS["player"]
 	)
 
