@@ -262,3 +262,9 @@ Status: PROVISIONAL (until playtest).
 Decision: Stamina spent gathering on the island is stamina you don't take into the tomb, and you
 come home with what's left. Only a full rest restores it.
 Why: Makes preparing a real choice: gather and craft now, or set out fresh.
+
+D41 — The tomb looks smooth but stays turn-based
+Status: DECIDED by Andrew (2026-11-13). Amends D29.
+Decision: In the tomb the player glides between tiles (0.14 s a step) and can hold a direction to
+keep walking, so it doesn't feel jarring after the island. The rules stay turn-based: each step is
+one tick, and nothing moves while you stand and think.

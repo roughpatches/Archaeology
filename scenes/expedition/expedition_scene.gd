@@ -39,12 +39,18 @@ const COLORS := {
 }
 ## The camera is close in, so a chamber is bigger than the screen (D34).
 const ZOOM := 2.0
+## Seconds the player takes to glide one tile.
+const STEP_TIME := 0.14
 
 var run: Expedition
 var mode := "explore"
 var dig_spot := -1
 
 var _camera := Camera2D.new()
+## Where the player is drawn, in pixels: it glides to the player's tile after each step.
+var _shown := Vector2.ZERO
+## Time left on the current step's glide; holding a direction steps again when it runs out.
+var _step_left := 0.0
 var _hud_layer := CanvasLayer.new()
 var _hud := Label.new()
 var _log := Label.new()
@@ -102,10 +108,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_DOWN, KEY_S:
 			dir = Vector2i.DOWN
 	if dir != Vector2i.ZERO:
-		run.move(dir)
-	elif key.echo:
+		if not key.echo and _step_left <= 0.0:
+			_step(dir)
+		get_viewport().set_input_as_handled()
 		return
-	elif key.keycode == KEY_Q:
+	if key.echo:
+		return
+	if key.keycode == KEY_Q:
 		run.survey()
 	elif key.keycode == KEY_F:
 		run.use_flare()
@@ -123,6 +132,46 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	get_viewport().set_input_as_handled()
 	_after_action()
+
+
+## Turn-based rules (D29), smooth look (D41): each step is one tick, and the player glides to
+## the new tile over STEP_TIME. Holding a direction keeps walking.
+func _process(delta: float) -> void:
+	if mode != "explore":
+		return
+	_step_left = maxf(0.0, _step_left - delta)
+	var target := _tile_centre(run.player)
+	if _shown != target:
+		_shown = _shown.move_toward(target, TILE / STEP_TIME * delta)
+		_camera.position = _shown
+		queue_redraw()
+	if _step_left <= 0.0:
+		var dir := _held_direction()
+		if dir != Vector2i.ZERO:
+			_step(dir)
+
+
+func _step(dir: Vector2i) -> void:
+	_step_left = STEP_TIME
+	run.move(dir)
+	_after_action()
+
+
+func _held_direction() -> Vector2i:
+	for pair: Array in [
+		[[KEY_LEFT, KEY_A], Vector2i.LEFT],
+		[[KEY_RIGHT, KEY_D], Vector2i.RIGHT],
+		[[KEY_UP, KEY_W], Vector2i.UP],
+		[[KEY_DOWN, KEY_S], Vector2i.DOWN],
+	]:
+		for k: Key in pair[0]:
+			if Input.is_physical_key_pressed(k):
+				return pair[1]
+	return Vector2i.ZERO
+
+
+func _tile_centre(p: Vector2i) -> Vector2:
+	return Vector2(p * TILE) + Vector2(TILE, TILE) / 2.0
 
 
 func _interact() -> void:
@@ -167,7 +216,9 @@ func _after_action() -> void:
 
 
 func _refresh() -> void:
-	_camera.position = Vector2(run.player * TILE) + Vector2(TILE, TILE) / 2.0
+	if _shown.distance_to(_tile_centre(run.player)) > TILE * 2:
+		_shown = _tile_centre(run.player)
+	_camera.position = _shown
 	var lines: Array[String] = []
 	(
 		lines
@@ -313,7 +364,7 @@ func _draw() -> void:
 				col = COLORS["creature_stun"]
 			draw_circle(Vector2(cr["pos"] * TILE) + Vector2(TILE, TILE) / 2.0, TILE * 0.4, col)
 	draw_rect(
-		Rect2(Vector2(run.player * TILE) + Vector2(3, 3), Vector2(TILE - 6, TILE - 6)),
+		Rect2(_shown - Vector2(TILE - 6, TILE - 6) / 2.0, Vector2(TILE - 6, TILE - 6)),
 		COLORS["player"]
 	)
 
