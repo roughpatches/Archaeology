@@ -248,3 +248,52 @@ func test_light_does_not_remember_where_you_have_been() -> void:
 	assert_false(e.lit.has(start))
 	assert_true(e.seen.has(start))
 	assert_true(e.lit.has(e.player))
+
+
+func test_deeper_floors_have_no_rope_back() -> void:
+	var e := _quiet(40)
+	e.enter_floor(2)
+	assert_false(e.can_climb_out(), "landing on floor 2")
+	assert_false(e.climb_out())
+
+
+func test_a_rope_anchor_makes_a_way_out() -> void:
+	var e := Expedition.new(41, 100, {"anchor": 1, "flare": 0, "ration": 0})
+	e.quakes = false
+	e.enter_floor(2)
+	e.creatures = []
+	assert_eq(e.place_anchor(), "")
+	assert_eq(e.anchors_left, 0)
+	assert_eq(e.stamina, 100 - Expedition.ANCHOR_COST)
+	assert_true(e.can_climb_out())
+	assert_ne(e.place_anchor(), "", "none left")
+	assert_true(e.climb_out())
+	assert_eq(e.pack_left(), {"anchor": 0, "flare": 0, "ration": 0})
+
+
+func test_an_anchor_needs_a_chamber() -> void:
+	var e := Expedition.new(42, 100, {"anchor": 2, "flare": 0, "ration": 0})
+	e.player = e.floor_data["tunnels"][0]["mouth"]
+	assert_ne(e.place_anchor(), "")
+	assert_eq(e.anchors_left, 2)
+
+
+func test_a_shaft_is_a_way_out() -> void:
+	for s in 60:
+		var e := _quiet(50 + s)
+		e.enter_floor(2)
+		for c: Dictionary in e.floor_data["chambers"]:
+			if c["shaft"] != FloorGen.NO_SHAFT:
+				e.player = c["shaft"]
+				assert_true(e.can_climb_out())
+				return
+	assert_true(false, "no shaft in 60 floors")
+
+
+func test_a_ration_gives_stamina_back() -> void:
+	var e := Expedition.new(43, 50, {"anchor": 0, "flare": 0, "ration": 1})
+	e.quakes = false
+	e.creatures = []
+	assert_eq(e.eat_ration(), "")
+	assert_eq(e.stamina, 50 + Expedition.RATION_GAIN)
+	assert_ne(e.eat_ration(), "", "none left")

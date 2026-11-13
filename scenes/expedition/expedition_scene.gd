@@ -24,6 +24,7 @@ const COLORS := {
 	"unseen": Color("050504"),
 	"player": Color("4aa3ff"),
 	"rope": Color("5fd35f"),
+	"shaft": Color("fff3a8"),
 	"stairs": Color("b07cff"),
 	"spot": Color("ff9a3c"),
 	"spot_mapped": Color("ffd84a"),
@@ -53,7 +54,10 @@ var _dig_view: DigView
 
 func _ready() -> void:
 	var stamina := int(GameState.data.get("stamina", {}).get("current", 100))
-	run = Expedition.new(randi(), stamina)
+	var pack: Dictionary = GameState.expedition_pack
+	if pack.is_empty():
+		pack = {"anchor": 0, "flare": 0, "ration": 0}
+	run = Expedition.new(randi(), stamina, pack, GameState.expedition_conditions())
 	_camera.zoom = Vector2(ZOOM, ZOOM)
 	add_child(_camera)
 	_hud.position = Vector2(6, 4)
@@ -79,8 +83,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mode == "result":
 		if not key.echo and key.keycode in [KEY_ENTER, KEY_E, KEY_SPACE]:
-			GameState.apply_expedition(run.bag, run.stamina)
-			get_tree().change_scene_to_file("res://scenes/boot/boot.tscn")
+			GameState.apply_expedition(run.bag, run.stamina, run.pack_left())
+			GameState.expedition_pack = {}
+			GameState.back_from_tomb = true
+			SaveService.save_game()
+			get_tree().change_scene_to_file("res://scenes/overworld/overworld.tscn")
 		return
 	if mode == "dig":
 		return  # DigView handles its own keys.
@@ -104,6 +111,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		run.use_flare()
 	elif key.keycode == KEY_E:
 		_interact()
+	elif key.keycode == KEY_T:
+		var why := run.place_anchor()
+		if why != "":
+			run.log_lines.append(why)
+	elif key.keycode == KEY_R:
+		var why := run.eat_ration()
+		if why != "":
+			run.log_lines.append(why)
 	else:
 		return
 	get_viewport().set_input_as_handled()
@@ -154,26 +169,34 @@ func _after_action() -> void:
 func _refresh() -> void:
 	_camera.position = Vector2(run.player * TILE) + Vector2(TILE, TILE) / 2.0
 	var lines: Array[String] = []
-	lines.append(
-		(
-			"Floor %d/%d   Stamina %d   Bag %d/%d   Flares %d"
-			% [
-				run.depth,
-				Expedition.FLOORS,
-				run.stamina,
-				run.bag.size(),
-				Expedition.BAG_SLOTS,
-				run.flares
-			]
+	(
+		lines
+		. append(
+			(
+				"Floor %d/%d   Stamina %d   Bag %d/%d   Flares %d  Anchors %d  Rations %d"
+				% [
+					run.depth,
+					Expedition.FLOORS,
+					run.stamina,
+					run.bag.size(),
+					Expedition.BAG_SLOTS,
+					run.flares,
+					run.anchors_left,
+					run.rations,
+				]
+			)
 		)
 	)
 	if mode == "result":
 		lines.append("")
 		lines.append(_result_text())
 	else:
-		var hint := "Move WASD  Q survey (%d)  F flare  E use" % Expedition.SURVEY_COST
+		var hint := (
+			"WASD move  Q survey (%d)  F flare  T anchor (%d)  R ration  E use"
+			% [Expedition.SURVEY_COST, Expedition.ANCHOR_COST]
+		)
 		if run.can_climb_out():
-			hint += "   [rope: E climbs out]"
+			hint += "   [way out: E climbs out]"
 		elif run.on_ledge():
 			hint += "   [drop: step on and there's no way back]"
 		elif run.on_exit():
@@ -252,7 +275,13 @@ func _draw() -> void:
 					draw_circle(
 						o + Vector2(3 + 5 * k, 3 + 4 * ((k + run.ticks) % 3)), 1, Color.WHEAT
 					)
-	_mark(run.floor_data["entry"], COLORS["rope"], "rope")
+	if run.depth == 1:
+		_mark(run.floor_data["entry"], COLORS["rope"], "rope")
+	for an in run.anchors:
+		_mark(an, COLORS["rope"], "anchor")
+	for c: Dictionary in run.floor_data["chambers"]:
+		if c["shaft"] != FloorGen.NO_SHAFT:
+			_mark(c["shaft"], COLORS["shaft"], "daylight")
 	for e: Vector2i in run.floor_data["exits"]:
 		if run.depth >= Expedition.FLOORS:
 			_mark(e, COLORS["rope"], "rope")

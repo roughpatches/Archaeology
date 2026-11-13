@@ -219,3 +219,46 @@ Decision: The camera is zoomed in so a chamber (13 × 9 tiles) is bigger than th
 your lamp reaches (5 steps over open ground, and the walls around it) is shown; nothing stays lit
 behind you, and you can't see into a chamber before you drop in.
 Why: Rooms should feel big, and you shouldn't see where you came from or where you're going.
+
+D35 — Time moves in half-days, never on a clock
+Status: DECIDED by Andrew (2026-11-12). Supersedes the 12-minute day in D6; answers D26.
+Decision: No clock runs anywhere. A day has two halves, day and night. Time moves on only when you
+take a full rest (half a day; stamina back to full) or go on an expedition (always half a day).
+Everything else, overworld or expedition, costs stamina, not time. You can explore or set out by
+day or by night.
+Why: Stamina, not a running clock, is the limit (Andrew).
+
+D36 — Time and season change what's on offer
+Status: DECIDED by Andrew (2026-11-12); the specifics are PROVISIONAL.
+Decision: Both halves of the game depend on time and season: what is happening, what resources and
+options there are, and (later) which story arcs open. Gray-box: four placeholder seasons of 7 days
+(Dry season, the Rains, Bloom, the Mists). Plants grow in set seasons and halves; Professor Philius
+talks about the season and the hour; at night the tomb has more creatures; in the Rains it has more
+streams.
+
+D37 — The overworld is calm and real-time
+Status: PROVISIONAL (until playtest).
+Decision: The overworld is the cozier, calmer, exploratory half (Andrew). You walk freely in real
+time with nothing hunting you; walking is free, gathering costs 2 stamina. The gray-box island has
+the camp (tent, workbench, Professor Philius), jungle paths with plants, and the tomb entrance.
+
+D38 — Getting out is part of the expedition
+Status: DECIDED by Andrew (2026-11-12); the ways out are PROVISIONAL. Supersedes the "rope at each
+floor's landing" part of D31.
+Decision: An expedition needs a way out as well as a way in. The rope you came in by is only on
+floor 1. Other ways out: rope anchors you bring (rig one in any chamber, 4 stamina), natural shafts
+the generator places (a warm draft at a tunnel mouth hints at one), and the far end of the last
+floor. Unlocked upgrades will add more (see D30). With no way out, you collapse and Professor
+Philius drags you home with half the bag.
+
+D39 — Gear is crafted from what you gather
+Status: PROVISIONAL (until playtest).
+Decision: At the camp workbench: rope anchor (2 vine fiber + 1 hardwood), flare (1 resin + 1 vine
+fiber), trail ration (1 wild fruit + 1 glowcap; +20 stamina in the tomb). You carry at most 3 of
+each, and take all of it in. Unused gear comes home. A new game starts with 1 anchor and 2 flares.
+
+D40 — One stamina pool for both halves
+Status: PROVISIONAL (until playtest).
+Decision: Stamina spent gathering on the island is stamina you don't take into the tomb, and you
+come home with what's left. Only a full rest restores it.
+Why: Makes preparing a real choice: gather and craft now, or set out fresh.
