@@ -120,8 +120,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_message = "Saved." if SaveService.save_game() == OK else "Save failed."
 		_:
 			return
-	get_viewport().set_input_as_handled()
-	_refresh()
+	# Setting out for the tomb changes scene; this node is then leaving the tree.
+	if is_inside_tree():
+		get_viewport().set_input_as_handled()
+		_refresh()
 
 
 func _use() -> void:
