@@ -332,3 +332,10 @@ animation and density. ART_GUIDE.md lists the assets in three batches. Art start
 (the tomb, the player and Philius) while the slice is playtested.
 Why: The pipeline's phase 5 rule: the rendering contract comes before any art, so props don't
 overlap, block wrongly or look sparse at playtest.
+
+D49 — Placeholder art made by code
+Status: PROVISIONAL; stand-in only.
+Decision: `tools/placeholder_art.py` draws contract-sized placeholder art (tiles, props,
+characters, markers) into `art/placeholder/`, and `--mockup DIR` composes sample screens. It
+follows RENDERING_CONTRACT.md so swapping in real art later changes files, not code. Not wired
+into the scenes yet.
