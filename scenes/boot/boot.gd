@@ -1,6 +1,6 @@
 extends Node2D
-## Placeholder start scene for the setup phase: proves the project runs, saves and loads.
-## Replaced by the expedition gray-box.
+## Placeholder camp for the gray-box: start an expedition, sleep, save and load.
+## Replaced by the real camp once the expedition passes its playtest.
 
 const DebugOverlay := preload("res://scenes/debug/debug_overlay.gd")
 
@@ -14,7 +14,9 @@ func _ready() -> void:
 	add_child(_label)
 	add_child(DebugOverlay.new())
 	GameState.changed.connect(_refresh)
-	if SaveService.has_save() and SaveService.load_game() == OK:
+	if not GameState.data.is_empty():
+		_status = "Back at camp."
+	elif SaveService.has_save() and SaveService.load_game() == OK:
 		_status = "Loaded your save."
 	else:
 		GameState.new_game(randi())
@@ -37,6 +39,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_N:
 			GameState.new_game(randi())
 			_status = "New game."
+		KEY_X:
+			get_tree().change_scene_to_file("res://scenes/expedition/expedition.tscn")
+			return
 		_:
 			return
 	_refresh()
@@ -46,7 +51,7 @@ func _refresh() -> void:
 	var d: Dictionary = GameState.data
 	var stamina: Dictionary = d.get("stamina", {})
 	_label.text = (
-		"ARCHAEOLOGY  (Godot setup)\n\n"
+		"ARCHAEOLOGY  (camp placeholder)\n\n"
 		+ (
 			"Day %d   Stamina %d / %d   World seed %d\n\n"
 			% [
@@ -56,6 +61,10 @@ func _refresh() -> void:
 				d.get("world_seed", 0)
 			]
 		)
-		+ "Z sleep   S save   L load   N new game   ` debug\n\n"
+		+ (
+			"Finds at camp: %d   Crystals: %d\n\n"
+			% [d.get("finds", []).size(), d.get("inventory", {}).get("Crystal", 0)]
+		)
+		+ "X expedition   Z sleep   S save   L load   N new game   ` debug\n\n"
 		+ _status
 	)

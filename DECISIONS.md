@@ -168,3 +168,54 @@ Status: PROVISIONAL.
 Decision: A small in-repo test runner (`tests/run_tests.gd`) run headless, instead of the GUT
 add-on, for the setup phase. Revisit if tests need mocks, doubles or parameterised cases.
 Why: No add-on to vendor or keep in step with Godot versions; enough for pure `core/` tests.
+
+D28 — Expedition gray-box rules
+Status: PROVISIONAL (until playtest).
+Decision: 5 generated floors of 3 × 3 room pieces; walking free, actions cost stamina; survey
+reading 4, descend 3, mine 2, dig tools 3/1/2/1, lift 2, bite 10; bag of 8; two flares; collapse
+loses half the bag. Dig spots are 6 × 5 with one find; a survey maps nearby spots and makes their
+finds documented. Details in FEEL_EXPEDITION.md.
+Why: The smallest expedition with a real push-or-return choice and the dig inside it.
+
+D29 — Expeditions are turn-based
+Status: PROVISIONAL (until playtest).
+Decision: Every step or action is one tick; creatures move on ticks.
+Why: Fits "no clock, stamina is the limit" (D26) and makes digging next to a creature a choice
+rather than a reflex test. The playtest asks whether it should be real-time instead.
+
+D30 — Shortcuts replace multi-day digs
+Status: PROPOSED, not in the gray-box. Supersedes D16 if Andrew agrees.
+Decision: Depth over several runs (a rope anchor every few floors) replaces digs that run over
+several days.
+
+D31 — Expedition floors are branching tunnels with one-way drops
+Status: PROVISIONAL (until playtest). Andrew asked for it (2026-11-12). Supersedes the floor
+layout in D28 (3 × 3 room pieces); D28's costs still hold.
+Decision: Each floor runs forward through 5 layers of chambers joined by tunnels that fork. Every
+tunnel ends in a drop into the next chamber, so once you take a fork you can't go back. You
+can't see into a chamber before you drop in; each tunnel mouth shows a hint of what is beyond
+(dig site, crystals, creature, spring, nothing) that is right 65% of the time, and a survey
+reading makes the hints from where you stand true. The rope up is at each floor's landing,
+before the first fork, and at the far end of the last floor. Springs give back 15 stamina.
+Why: The player should choose how to go on with limited, unreliable knowledge, and live with it.
+
+D32 — The tomb shifts around the player
+Status: PROVISIONAL (until playtest). Andrew asked for it (2026-11-12).
+Decision: Expeditions change as you move through them. Rockfalls drop rubble near you (a warning
+of trickling dust first; 8 stamina if it lands on you; walk into rubble to clear a tile for 3).
+Tunnels ahead can cave in after a groan, but never the last open way on. Some chambers have a
+shallow stream that moves a column every 6 ticks; wading costs 1 stamina a tile, and creatures
+won't cross water. Chance of a rumble each quiet tick: 4% + 1% per floor.
+Why: The place should feel alive and unstable, and keep forcing new choices.
+
+D33 — The first expedition is an ancient jungle tomb
+Status: DECIDED by Andrew (2026-11-12).
+Decision: The intro expedition is an ancient jungle tomb. The gray-box uses a mossy stone palette,
+tomb chamber names, and tomb finds; names stay placeholders (D10).
+
+D34 — Close camera, lamp-only light
+Status: PROVISIONAL (until playtest). Andrew asked for it (2026-11-12).
+Decision: The camera is zoomed in so a chamber (13 × 9 tiles) is bigger than the screen. Only what
+your lamp reaches (5 steps over open ground, and the walls around it) is shown; nothing stays lit
+behind you, and you can't see into a chamber before you drop in.
+Why: Rooms should feel big, and you shouldn't see where you came from or where you're going.
