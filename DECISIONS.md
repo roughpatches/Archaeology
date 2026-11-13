@@ -323,3 +323,12 @@ title, save and quit. In the tomb, Esc pauses: carry on, give up (Philius hauls 
 the bag is lost, as in a collapse), or quit the game. The game saves as you set out, so
 quitting mid-expedition puts you back as you were before you went in. Supersedes the boot
 scene going straight to the island.
+
+D48 — Rendering contract before art
+Status: PROVISIONAL until the first art batch is seen in the game.
+Decision: RENDERING_CONTRACT.md fixes the scale (16 px tiles, 32 × 32 characters, camera 2×,
+integer window scaling), footprints and anchors, draw layers, the palette roles, tile sets,
+animation and density. ART_GUIDE.md lists the assets in three batches. Art starts with batch 1
+(the tomb, the player and Philius) while the slice is playtested.
+Why: The pipeline's phase 5 rule: the rendering contract comes before any art, so props don't
+overlap, block wrongly or look sparse at playtest.

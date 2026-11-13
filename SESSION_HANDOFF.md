@@ -28,12 +28,15 @@ and a title screen with pausing (D47) complete the slice. It is waiting for a pl
 
 1. Andrew plays the whole slice (title, island, tomb, boat, camp) and logs it in
    PLAYTEST_LOG.md. The slice is done when the loop plays start to finish and saves and reloads.
-2. Then phase 5: contracts and the rendering contract before any art.
+2. Phase 5 has started: RENDERING_CONTRACT.md and ART_GUIDE.md (D48). Next is art batch 1 and a
+   code change that draws sprites where they exist and falls back to the gray-box shapes.
 
 ## Open questions
 
 - D30: unlockable shortcuts and permanent anchors over several runs?
 - What renown unlocks.
+- Pixel Lab isn't reachable from cloud threads yet (needs a claude.ai connector, or the
+  environment's network allowlist plus a secret).
 - Quitting mid-expedition undoes the trip (D47). Fine for a slice; may want a real mid-run
   save later.
 
