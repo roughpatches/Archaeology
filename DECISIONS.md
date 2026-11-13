@@ -337,5 +337,7 @@ D49 — Placeholder art made by code
 Status: PROVISIONAL; stand-in only.
 Decision: `tools/placeholder_art.py` draws contract-sized placeholder art (tiles, props,
 characters, markers) into `art/placeholder/`, and `--mockup DIR` composes sample screens. It
-follows RENDERING_CONTRACT.md so swapping in real art later changes files, not code. Not wired
-into the scenes yet.
+follows RENDERING_CONTRACT.md so swapping in real art later changes files, not code. The scenes
+draw it through `scenes/art.gd`, which prefers real art at `art/<name>.png`, then
+`art/placeholder/<name>.png`, then the gray-box shape. Labels, light and the HUD stay drawn by
+code.

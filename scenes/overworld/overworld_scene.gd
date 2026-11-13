@@ -18,6 +18,7 @@ const Finds := preload("res://core/finds.gd")
 const Camp := preload("res://core/overworld/camp.gd")
 const Story := preload("res://core/overworld/story.gd")
 const DebugOverlay := preload("res://scenes/debug/debug_overlay.gd")
+const Art := preload("res://scenes/art.gd")
 
 const TILE := 16
 const ZOOM := 2.0
@@ -61,6 +62,8 @@ const COLORS := {
 	"shelf": Color("b08850"),
 	"plans": Color("e8e0c8"),
 }
+## Season names in art file names (RENDERING_CONTRACT.md section 5).
+const SEASON_ART: Array[String] = ["dry", "rains", "bloom", "mists"]
 ## Map characters with a fixed colour (grass and jungle change with the season).
 const GROUND := {
 	"~": "sea",
@@ -135,6 +138,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	queue_redraw()  # the sea moves
 	if _page_kind != "":
 		return
 	var dir := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
@@ -629,19 +633,68 @@ func _draw() -> void:
 	var night := Calendar.is_night(GameState.half())
 	for y in size.y:
 		for x in size.x:
-			var p := Vector2i(x, y)
-			var c := _ground(IslandMap.char_at(p), season)
-			if night:
-				var dist := player_pos.distance_to(_centre_of(p)) / TILE
-				var dark := clampf((dist - NIGHT_LIGHT) / NIGHT_FADE, 0.0, 1.0) * 0.85 + 0.1
-				c = c.lerp(COLORS["night"], dark)
-			draw_rect(Rect2(Vector2(p * TILE), Vector2(TILE, TILE)), c)
+			_draw_ground(Vector2i(x, y), season)
+	# Y-sorted layer (contract section 3): things and the player by the y of their feet.
+	var sorted: Array = []
 	for t in _things:
-		_draw_thing(t, night)
-	draw_rect(
-		Rect2(player_pos - Vector2(HALF_BOX, HALF_BOX), Vector2(HALF_BOX, HALF_BOX) * 2),
-		COLORS["player"]
-	)
+		sorted.append([float(t["pos"].y * TILE + TILE), t])
+	sorted.append([player_pos.y + HALF_BOX, {}])
+	sorted.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	for item: Array in sorted:
+		if (item[1] as Dictionary).is_empty():
+			_draw_player()
+		else:
+			_draw_thing(item[1], night)
+	if night:
+		_draw_night(size)
+
+
+## A ground tile: art if there is some (D49), else the gray-box colour.
+func _draw_ground(p: Vector2i, season: int) -> void:
+	var ch := IslandMap.char_at(p)
+	var rect := Rect2(Vector2(p * TILE), Vector2(TILE, TILE))
+	var art := _ground_art(ch, p, season)
+	var t := Art.tex(art) if art != "" else null
+	if t != null:
+		draw_texture(t, rect.position)
+	else:
+		draw_rect(rect, _ground(ch, season))
+
+
+func _ground_art(ch: String, p: Vector2i, season: int) -> String:
+	var season_name: String = SEASON_ART[season]
+	match ch:
+		"#":
+			# Show the front of the jungle where open ground is below it.
+			var face := IslandMap.char_at(p + Vector2i.DOWN) != "#"
+			return "island/jungle_%s%s" % ["face_" if face else "", season_name]
+		"~", "B":
+			return "island/sea_%d" % (int(Time.get_ticks_msec() / 250.0 + p.x) % 4)
+		"=":
+			return "island/jetty"
+		",", "@", "V", "C":
+			return "island/sand"
+	return "island/grass_" + season_name
+
+
+## Night (D35): only the lamp lights the way, drawn over the art (contract section 3).
+func _draw_night(size: Vector2i) -> void:
+	for y in size.y:
+		for x in size.x:
+			var p := Vector2i(x, y)
+			var dist := player_pos.distance_to(_centre_of(p)) / TILE
+			var dark := clampf((dist - NIGHT_LIGHT) / NIGHT_FADE, 0.0, 1.0) * 0.85 + 0.1
+			var c: Color = COLORS["night"]
+			c.a = dark
+			draw_rect(Rect2(Vector2(p * TILE), Vector2(TILE, TILE)), c)
+
+
+func _draw_player() -> void:
+	if not Art.draw_feet(self, "characters/player", player_pos + Vector2(0, HALF_BOX)):
+		draw_rect(
+			Rect2(player_pos - Vector2(HALF_BOX, HALF_BOX), Vector2(HALF_BOX, HALF_BOX) * 2),
+			COLORS["player"]
+		)
 
 
 func _ground(ch: String, season: int) -> Color:
@@ -652,10 +705,43 @@ func _ground(ch: String, season: int) -> Color:
 	return SEASON_GRASS[season]
 
 
+## The art name for a thing, or "" if it has none (or isn't here now).
+func _thing_art(t: Dictionary) -> String:
+	var kind: String = t["kind"]
+	match kind:
+		"tent", "bench", "plans", "boat":
+			return "camp/" + kind
+		"tomb":
+			return "camp/tomb_door"
+		"shelf":
+			return "camp/shelf_%d" % mini(GameState.shelf().size(), Camp.SHELF_SLOTS)
+		"philius", "trader", "collector":
+			return "characters/" + kind
+	if Forage.KINDS.has(kind):
+		var ready_at := int(GameState.data["forage"].get(t["id"], 0))
+		var why := Forage.why_not(kind, ready_at, GameState.day(), GameState.half())
+		return "plants/%s%s" % [kind, "" if why == "" else "_picked"]
+	return ""
+
+
 func _draw_thing(t: Dictionary, night: bool) -> void:
 	var dist := player_pos.distance_to(_centre_of(t["pos"])) / TILE
 	if night and dist > NIGHT_LIGHT + NIGHT_FADE:
 		return
+	var kind: String = t["kind"]
+	if not _present(kind):
+		return
+	var art := _thing_art(t)
+	if art.begins_with("characters/"):
+		if Art.draw_feet(self, art, _centre_of(t["pos"]) + Vector2(0, 6)):
+			return
+	elif art != "" and Art.draw_on_tile(self, art, t["pos"], TILE):
+		return
+	_draw_thing_shape(t)
+
+
+## The gray-box shape for a thing with no art yet.
+func _draw_thing_shape(t: Dictionary) -> void:
 	var o := Vector2(t["pos"] * TILE)
 	var centre := o + Vector2(TILE, TILE) / 2.0
 	var kind: String = t["kind"]
@@ -669,8 +755,6 @@ func _draw_thing(t: Dictionary, night: bool) -> void:
 			draw_rect(Rect2(o + Vector2(1, 5), Vector2(14, 6)), COLORS["bench"])
 		"shelf":
 			draw_rect(Rect2(o + Vector2(1, 2), Vector2(14, 12)), COLORS["shelf"])
-			for k in mini(GameState.shelf().size(), Camp.SHELF_SLOTS):
-				draw_rect(Rect2(o + Vector2(2 + k * 2.6, 5), Vector2(2, 3)), Color("7ff0c0"))
 		"plans":
 			draw_rect(Rect2(o + Vector2(3, 2), Vector2(10, 12)), COLORS["plans"])
 		"philius":
@@ -679,17 +763,13 @@ func _draw_thing(t: Dictionary, night: bool) -> void:
 		"tomb":
 			draw_rect(Rect2(o + Vector2(3, 2), Vector2(10, 14)), COLORS["tomb"])
 		"boat":
-			if _present("boat"):
-				draw_rect(Rect2(o + Vector2(-8, 6), Vector2(32, 9)), COLORS["boat"])
-				draw_colored_polygon(
-					PackedVector2Array(
-						[o + Vector2(8, -14), o + Vector2(20, 5), o + Vector2(8, 5)]
-					),
-					COLORS["sail"]
-				)
+			draw_rect(Rect2(o + Vector2(-8, 6), Vector2(32, 9)), COLORS["boat"])
+			draw_colored_polygon(
+				PackedVector2Array([o + Vector2(8, -14), o + Vector2(20, 5), o + Vector2(8, 5)]),
+				COLORS["sail"]
+			)
 		"trader", "collector":
-			if _present(kind):
-				draw_circle(centre + Vector2(0, 2), 5, COLORS[kind])
+			draw_circle(centre + Vector2(0, 2), 5, COLORS[kind])
 		_:
 			var ready_at := int(GameState.data["forage"].get(t["id"], 0))
 			var why := Forage.why_not(kind, ready_at, GameState.day(), GameState.half())

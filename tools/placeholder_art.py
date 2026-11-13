@@ -287,7 +287,7 @@ def shelf(n=0):
     rect(im, 2, 7, 12, 1, P["wood"])
     gems = [P["node"], hexc("4fa860"), hexc("ffd84a"), hexc("d8cfc0"), hexc("c87a50")]
     for k in range(n):
-        x, y = 3 + (k % 3) * 4, 4 if k < 3 else 10
+        x, y = 3 + (k % 3) * 4, 4 if k < 3 else 9
         rect(im, x, y, 2, 3, gems[k])
     return outline(im)
 
@@ -519,7 +519,8 @@ def all_assets():
     a["tomb/spring"] = spring()
     a["camp/tent"] = tent()
     a["camp/bench"] = bench()
-    a["camp/shelf"] = shelf(3)
+    for n in range(6):
+        a["camp/shelf_%d" % n] = shelf(n)
     a["camp/plans"] = plans()
     a["camp/tomb_door"] = tomb_door()
     a["camp/boat"] = boat()
@@ -528,6 +529,8 @@ def all_assets():
         a["plants/%s_picked" % k] = plant(k, False)
     a["characters/player"] = player()
     a["characters/philius"] = philius()
+    a["characters/trader"] = person(hexc("e0a040"), hat=hexc("6b4a2a"))
+    a["characters/collector"] = person(hexc("40c0a0"), hair=hexc("3a2a1a"))
     for s in ("normal", "flee", "stunned"):
         a["characters/creature_" + s] = creature(s)
     return a

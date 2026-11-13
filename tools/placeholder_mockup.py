@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parent.parent
 T = 16
 VIEW = (240, 135)
 SCALE = 6
-THINGS = {"T": "camp/tent", "W": "camp/bench", "D": "camp/shelf", "K": "camp/plans",
+THINGS = {"T": "camp/tent", "W": "camp/bench", "D": "camp/shelf_3", "K": "camp/plans",
           "E": "camp/tomb_door", "B": "camp/boat", "f": "plants/fiber", "w": "plants/wood",
           "r": "plants/resin", "u": "plants/fruit", "g": "plants/glowcap"}
 
