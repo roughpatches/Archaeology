@@ -125,20 +125,3 @@ func apply_expedition(bag: Array, stamina_left: int, pack_left: Dictionary = {})
 	var stamina: Dictionary = data["stamina"]
 	stamina["current"] = clampi(stamina_left, 0, int(stamina["max"]))
 	changed.emit()
-
-
-## Brings an expedition's results home: finds go to the finds list, materials to the
-## inventory, and the day's stamina is whatever was left.
-func apply_expedition(bag: Array, stamina_left: int) -> void:
-	var finds: Array = data["finds"]
-	var inventory: Dictionary = data["inventory"]
-	for item: Dictionary in bag:
-		if item.get("kind") == "material":
-			inventory[item["id"]] = int(inventory.get(item["id"], 0)) + 1
-		else:
-			var find := item.duplicate()
-			find.erase("kind")
-			finds.append(find)
-	var stamina: Dictionary = data["stamina"]
-	stamina["current"] = clampi(stamina_left, 0, int(stamina["max"]))
-	changed.emit()
